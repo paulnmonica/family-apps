@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ff8a3d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="우리앱">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>우리 아이들 앱</title>
+<link rel="stylesheet" href="shared/common.css">
+<style>
+  .hero { text-align: center; padding: 18px 0 8px; }
+  .hero h1 { font-size: 30px; }
+  .hero p { margin: 6px 0 0; color: var(--muted); }
+  .apps { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 18px 0; }
+  .app {
+    display: block; text-decoration: none; color: var(--ink); border-radius: 22px; padding: 22px 18px; box-shadow: var(--shadow);
+    transition: transform .15s;
+  }
+  .app:active { transform: scale(.97); }
+  .app .ico { font-size: 52px; line-height: 1; }
+  .app h2 { margin: 10px 0 4px; font-size: 22px; }
+  .app p { margin: 0; font-size: 14px; color: #6b5e57; }
+  .app.money { background: linear-gradient(135deg, #ffe4c7, #fff3e3); }
+  .app.pilsa { background: linear-gradient(135deg, #c9f5e2, #ecfdf5); }
+
+  .kidrow { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px dashed var(--line); }
+  .kidrow:last-child { border-bottom: 0; }
+  .kidrow .em { font-size: 34px; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; flex: none; }
+  .kidrow .info { flex: 1; min-width: 0; }
+  .kidrow .nm { font-family: 'Jua', sans-serif; font-size: 19px; }
+  .kidrow .sm { font-size: 14px; color: var(--muted); }
+
+  .edit-grid { display: grid; grid-template-columns: 64px 1fr 110px 48px; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .edit-grid input[type=color] { padding: 2px; height: 44px; }
+  .edit-grid .emo { text-align: center; font-size: 22px; padding: 6px; }
+  @media (max-width: 480px) {
+    .apps { grid-template-columns: 1fr; }
+    .edit-grid { grid-template-columns: 56px 1fr 92px 44px; gap: 6px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <h1>🌟 우리 아이들 앱</h1>
+    <p>아빠·엄마가 너희에게 주는 작은 선물이야 💝</p>
+  </div>
+
+  <div class="apps">
+    <a class="app money" href="allowance/index.html">
+      <div class="ico">💰</div>
+      <h2>용돈기입장</h2>
+      <p>받은 돈, 쓴 돈을 적고 갖고 싶은 것을 위해 저금해요</p>
+    </a>
+    <a class="app pilsa" href="pilsa/index.html">
+      <div class="ico">✍️</div>
+      <h2>필사 달력</h2>
+      <p>매일 좋은 문장을 따라 쓰고 달력에 스티커를 모아요</p>
+    </a>
+  </div>
+
+  <div class="card">
+    <h2>👧👦 오늘의 우리 아이들</h2>
+    <div id="summary"></div>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary class="title" style="cursor:pointer;font-size:18px">⚙️ 아이 정보 바꾸기 (부모님용)</summary>
+      <p class="muted">이름, 동물 아이콘, 태어난 해, 색깔을 바꿀 수 있어요. 태어난 해에 맞춰 필사 문장 난이도가 정해져요.</p>
+      <form id="kidForm">
+        <div id="kidEdit"></div>
+        <button class="btn primary" type="submit" style="margin-top:6px">저장</button>
+      </form>
+    </details>
+  </div>
+
+  <div class="card">
+    <h2>💾 백업 · 복원</h2>
+    <p class="muted" style="margin-top:0">기록은 이 컴퓨터(브라우저) 안에만 저장돼요. 가끔 백업 파일로 내려받아 두면 안전해요.</p>
+    <div class="row wrap-row">
+      <button class="btn" id="exportBtn">⬇️ 백업 파일 내려받기</button>
+      <button class="btn" id="importBtn">⬆️ 백업 파일로 복원</button>
+      <input type="file" id="importFile" accept=".json,application/json" class="hidden">
+    </div>
+  </div>
+</div>
+
+<script src="shared/common.js"></script>
+<script>
+const F = Family, $ = s => document.querySelector(s), esc = F.esc;
+
+function walletOf(id) {
+  const d = F.getData('allowance.' + id, null);
+  if (!d || !d.tx) return { w: 0, p: 0 };
+  const w = d.tx.reduce((s, t) => s + ((t.type === 'in' || t.type === 'unsave') ? 1 : -1) * t.amount, 0);
+  const p = (d.goals || []).filter(g => !g.done).reduce((s, g) => s + g.saved, 0);
+  return { w, p };
+}
+function pilsaOf(id) {
+  const d = F.getData('pilsa.' + id, null);
+  const days = (d && d.days) || {};
+  const done = k => !!(days[k] && days[k].done);
+  const dt = new Date();
+  const todayDone = done(F.ymd(dt));
+  if (!todayDone) dt.setDate(dt.getDate() - 1);
+  let n = 0;
+  while (done(F.ymd(dt))) { n++; dt.setDate(dt.getDate() - 1); }
+  return { todayDone, streak: n };
+}
+
+function renderSummary() {
+  $('#summary').innerHTML = F.kids().map(k => {
+    const m = walletOf(k.id), p = pilsaOf(k.id);
+    return `<div class="kidrow">
+      <div class="em" style="background:color-mix(in srgb, ${esc(k.color)} 20%, white)">${esc(k.emoji)}</div>
+      <div class="info">
+        <div class="nm">${esc(k.name)} <span class="sm">${F.gradeLabel(k.birthYear)}</span></div>
+        <div class="sm">💰 지갑 ${F.won(m.w)}${m.p ? ` · 🐷 ${F.won(m.p)}` : ''}</div>
+        <div class="sm">✍️ ${p.todayDone ? '오늘 필사 완료 ✅' : '오늘 필사 아직 ⏳'}${p.streak ? ` · 🔥 ${p.streak}일 연속` : ''}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderEdit() {
+  const thisYear = new Date().getFullYear();
+  const years = []; for (let y = thisYear; y >= thisYear - 20; y--) years.push(y);
+  $('#kidEdit').innerHTML = F.kids().map(k => `
+    <div class="edit-grid" data-id="${esc(k.id)}">
+      <input class="emo" maxlength="4" value="${esc(k.emoji)}" aria-label="아이콘">
+      <input class="nm" maxlength="10" value="${esc(k.name)}" aria-label="이름">
+      <select class="by" aria-label="태어난 해">${years.map(y => `<option ${y === k.birthYear ? 'selected' : ''}>${y}</option>`).join('')}</select>
+      <input type="color" class="co" value="${esc(k.color)}" aria-label="색깔">
+    </div>`).join('');
+}
+
+$('#kidForm').onsubmit = e => {
+  e.preventDefault();
+  const list = [...document.querySelectorAll('#kidEdit .edit-grid')].map(r => ({
+    id: r.dataset.id,
+    emoji: r.querySelector('.emo').value.trim() || '🙂',
+    name: r.querySelector('.nm').value.trim() || '아이',
+    birthYear: Number(r.querySelector('.by').value),
+    color: r.querySelector('.co').value,
+  }));
+  F.saveKids(list);
+  F.toast('저장했어요!');
+  renderSummary();
+};
+
+$('#exportBtn').onclick = () => F.exportAll();
+$('#importBtn').onclick = () => $('#importFile').click();
+$('#importFile').onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  F.importAll(f, () => { F.toast('복원했어요!'); renderSummary(); renderEdit(); });
+  e.target.value = '';
+};
+
+renderSummary();
+renderEdit();
+window.addEventListener('pageshow', renderSummary);
+</script>
+</body>
+</html>

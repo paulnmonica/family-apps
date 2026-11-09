@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ff8a3d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="우리앱">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icons/icon-192.png">
+<link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+<title>필사 달력</title>
+<link rel="stylesheet" href="../shared/common.css">
+<style>
+  :root { --accent: #10b981; --accent-soft: #e8faf3; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; }
+  .stats b { display: block; font-family: 'Jua', sans-serif; font-size: 26px; font-weight: 400; line-height: 1.2; }
+  .stats span { font-size: 13px; color: var(--muted); }
+  .level { text-align: center; font-size: 13px; color: var(--muted); margin-top: 10px; }
+
+  .mnav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .mnav button { border: 0; background: var(--accent-soft); width: 38px; height: 38px; border-radius: 50%; font-size: 18px; cursor: pointer; }
+  .mnav .title { font-size: 21px; }
+  .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+  .wd { text-align: center; font-size: 13px; color: var(--muted); padding: 4px 0; }
+  .wd:first-child { color: var(--bad); }
+  .wd:last-child { color: #3b82f6; }
+  .cell {
+    aspect-ratio: 1 / 1.05; border: 2px solid transparent; border-radius: 12px; background: #faf6f1; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 4px 0 0; font: inherit; color: var(--ink); position: relative;
+  }
+  .cell .n { font-size: 13px; }
+  .cell .st { font-size: clamp(18px, 5vw, 28px); line-height: 1.1; margin-top: 2px; }
+  .cell.empty { background: none; cursor: default; }
+  .cell.future { opacity: .45; }
+  .cell.today { border-color: var(--accent); }
+  .cell.sel { background: var(--accent-soft); border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+  .cell.done { background: #fff6d6; }
+  .cell .pk { position: absolute; right: 2px; bottom: 0; font-size: 12px; }
+  .cell.sun .n { color: var(--bad); }
+  .cell.sat .n { color: #3b82f6; }
+
+  .day-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  .sentence-box { background: #fffdf8; border: 2px dashed #eadbc8; border-radius: 16px; padding: 18px; margin-bottom: 14px; }
+  .sentence { font-family: 'Gowun Batang', 'Batang', serif; font-size: 23px; font-weight: 700; line-height: 1.7; word-break: keep-all; }
+  .meaning { margin-top: 8px; font-size: 15px; color: #6b5e57; }
+  .src { margin-top: 6px; font-size: 13px; color: var(--muted); text-align: right; }
+
+  .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 12px; }
+  .modes button { border: 2px solid var(--line); background: #fff; border-radius: 14px; padding: 10px 4px; font-family: 'Jua', sans-serif; font-size: 15px; cursor: pointer; color: var(--muted); }
+  .modes button.on { border-color: var(--accent); background: var(--accent-soft); color: #047857; }
+
+  .canvas-wrap { border: 2px solid var(--line); border-radius: 14px; overflow: hidden; background: #fffdf8; margin-bottom: 10px; }
+  #trace { display: block; touch-action: none; cursor: crosshair; }
+
+  .typeview { font-family: 'Gowun Batang', serif; font-size: 20px; line-height: 1.8; margin-bottom: 8px; color: #b9b0a8; word-break: keep-all; }
+  .typeview .ok { color: var(--good); }
+  .typeview .ng { color: var(--bad); text-decoration: underline; }
+  .acc { text-align: right; font-size: 14px; color: var(--muted); margin: 6px 0 12px; }
+
+  .stickers { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 10px 0; }
+  .stickers button { font-size: 30px; width: 54px; height: 54px; border: 2px solid var(--line); border-radius: 14px; background: #fff; cursor: pointer; }
+  .stickers button.on { border-color: var(--accent); background: var(--accent-soft); transform: scale(1.08); }
+
+  .done-view { text-align: center; }
+  .done-view .big { font-size: 64px; line-height: 1.1; }
+  .done-view .note { background: #faf6f1; border-radius: 12px; padding: 10px 14px; margin: 10px 0; text-align: left; white-space: pre-wrap; }
+  .parent-stamp { border: 2px dashed #f59e0b; color: #b45309; background: #fffbeb; }
+  .parent-stamp.on { border-style: solid; background: #fde68a; }
+
+  .custom-item { display: flex; gap: 8px; align-items: flex-start; padding: 8px 0; border-bottom: 1px dashed var(--line); }
+  .custom-item .grow { word-break: keep-all; }
+  summary { cursor: pointer; font-family: 'Jua', sans-serif; font-size: 18px; }
+  @media (max-width: 420px) { .sentence { font-size: 20px; } .modes button { font-size: 14px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="home" href="../index.html" title="처음 화면">🏠</a>
+    <h1>✍️ 필사 달력</h1>
+  </div>
+
+  <div id="kids" class="kids"></div>
+
+  <div class="card">
+    <div class="stats" id="stats"></div>
+    <div class="level" id="level"></div>
+  </div>
+
+  <div class="card">
+    <div class="mnav"><button id="prevM">◀</button><span class="title" id="mLabel"></span><button id="nextM">▶</button></div>
+    <div class="cal" id="cal"></div>
+  </div>
+
+  <div class="card" id="day"></div>
+
+  <div class="card">
+    <details id="customBox">
+      <summary>📝 우리 가족 문장 넣기 (부모님용)</summary>
+      <p class="muted" style="margin-bottom:0">여기에 넣은 문장은 이 아이의 매일 문장에 함께 섞여 나와요. 좋아하는 책 구절이나 가훈을 넣어 보세요.</p>
+      <form id="customForm" autocomplete="off">
+        <label class="f" for="cText">문장</label>
+        <textarea id="cText" rows="2" maxlength="200" placeholder="예) 오늘도 나는 어제보다 조금 더 자랐다."></textarea>
+        <label class="f" for="cSrc">출처 (선택)</label>
+        <input id="cSrc" maxlength="40" placeholder="예) 엄마가 좋아하는 문장">
+        <div style="margin-top:12px"><button class="btn primary" type="submit">문장 추가</button></div>
+      </form>
+      <div id="customList" style="margin-top:10px"></div>
+    </details>
+  </div>
+</div>
+
+<script src="../shared/common.js"></script>
+<script src="sentences.js"></script>
+<script>
+const F = Family, $ = s => document.querySelector(s), esc = F.esc;
+const STICKERS = ['⭐', '🌈', '🍀', '🌸', '🐶', '🦄', '🚀', '🍓', '🎈', '💎', '🌻', '🐳'];
+const MODES = { paper: '📓 공책에', trace: '🖊️ 화면에', type: '⌨️ 타자로' };
+const MODE_DONE = { paper: '공책에 써서', trace: '화면에 따라 써서', type: '타자로 써서' };
+const WD = ['일', '월', '화', '수', '목', '금', '토'];
+
+let kid, data, viewY, viewM, selDate, mode = 'paper', pending = null;
+const today = () => F.ymd();
+
+function load() {
+  kid = F.current();
+  data = F.getData('pilsa.' + kid.id, null) || {};
+  data.days = data.days || {};
+  data.custom = data.custom || [];
+  mode = data.lastMode || 'paper';
+  document.documentElement.style.setProperty('--kc', kid.color);
+}
+function save() { F.setData('pilsa.' + kid.id, data); }
+
+function pool() {
+  const lv = F.level(kid.birthYear);
+  return [...SENTENCES[lv], ...data.custom.map(c => ({ t: c.t, m: '', s: c.s || '우리 가족 문장' }))];
+}
+function dayNo(ds) { const [y, m, d] = ds.split('-').map(Number); return Math.floor(Date.UTC(y, m - 1, d) / 86400000); }
+function sentenceFor(ds) {
+  const r = data.days[ds];
+  if (r && r.sentence) return r.sentence;
+  const p = pool();
+  return p[((dayNo(ds) % p.length) + p.length) % p.length];
+}
+function isDone(ds) { return !!(data.days[ds] && data.days[ds].done); }
+
+function streak() {
+  const d = new Date();
+  if (!isDone(F.ymd(d))) d.setDate(d.getDate() - 1);
+  let n = 0;
+  while (isDone(F.ymd(d))) { n++; d.setDate(d.getDate() - 1); }
+  return n;
+}
+
+function renderAll() { renderStats(); renderCal(); renderDay(); renderCustom(); }
+
+function renderStats() {
+  const ym = `${viewY}-${String(viewM + 1).padStart(2, '0')}`;
+  const total = Object.keys(data.days).filter(isDone).length;
+  const month = Object.keys(data.days).filter(k => k.startsWith(ym) && isDone(k)).length;
+  $('#stats').innerHTML = `
+    <div><b>🔥 ${streak()}</b><span>연속으로 쓴 날</span></div>
+    <div><b>📅 ${month}</b><span>${viewM + 1}월에 쓴 날</span></div>
+    <div><b>🏆 ${total}</b><span>지금까지 쓴 날</span></div>`;
+  const lv = F.level(kid.birthYear);
+  $('#level').textContent = `${kid.emoji} ${kid.name} (${F.gradeLabel(kid.birthYear)}) · 오늘의 문장: ${LEVEL_NAME[lv]}${data.custom.length ? ' + 우리 가족 문장' : ''}`;
+}
+
+function renderCal() {
+  $('#mLabel').textContent = `${viewY}년 ${viewM + 1}월`;
+  const first = new Date(viewY, viewM, 1).getDay();
+  const last = new Date(viewY, viewM + 1, 0).getDate();
+  const t = today();
+  let html = WD.map(w => `<div class="wd">${w}</div>`).join('');
+  for (let i = 0; i < first; i++) html += '<div class="cell empty"></div>';
+  for (let d = 1; d <= last; d++) {
+    const ds = `${viewY}-${String(viewM + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const r = data.days[ds];
+    const dow = (first + d - 1) % 7;
+    const cls = ['cell', ds === t && 'today', ds > t && 'future', ds === selDate && 'sel', isDone(ds) && 'done', dow === 0 && 'sun', dow === 6 && 'sat'].filter(Boolean).join(' ');
+    html += `<button class="${cls}" data-d="${ds}"><span class="n">${d}</span><span class="st">${isDone(ds) ? esc(r.sticker || '⭐') : ''}</span>${r && r.parent ? '<span class="pk">👍</span>' : ''}</button>`;
+  }
+  $('#cal').innerHTML = html;
+}
+
+function dateTitle(ds) {
+  const d = F.parseYmd(ds);
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 (${WD[d.getDay()]})`;
+}
+
+function renderDay() {
+  const ds = selDate, r = data.days[ds], s = sentenceFor(ds), t = today();
+  const isToday = ds === t, future = ds > t;
+  let head = `<div class="day-title"><h2 style="margin:0">${dateTitle(ds)}${isToday ? ' · 오늘' : ''}</h2>
+    ${!isDone(ds) && !future ? '<button class="btn small" id="shuffle" title="다른 문장으로 바꾸기">🔄 다른 문장</button>' : ''}</div>
+    <div class="sentence-box">
+      <div class="sentence">${esc(s.t)}</div>
+      ${s.m ? `<div class="meaning">💡 ${esc(s.m)}</div>` : ''}
+      <div class="src">— ${esc(s.s)}</div>
+    </div>`;
+  let body = '';
+  if (future) {
+    body = `<p class="center muted">아직 오지 않은 날이에요. 미리 읽어 봐도 좋아요 😊</p>`;
+  } else if (isDone(ds)) {
+    body = `<div class="done-view">
+      <div class="big">${esc(r.sticker || '⭐')}</div>
+      <h3>${MODE_DONE[r.mode] || ''} 필사 완료!</h3>
+      ${r.note ? `<div class="note">💬 ${esc(r.note)}</div>` : ''}
+      ${r.typed ? `<div class="note" style="font-family:'Gowun Batang',serif">⌨️ ${esc(r.typed)}</div>` : ''}
+      <div class="row" style="justify-content:center;margin-top:12px;flex-wrap:wrap">
+        <button class="btn parent-stamp ${r.parent ? 'on' : ''}" id="parentBtn">${r.parent ? '👍 부모님이 확인했어요' : '👍 부모님 확인 도장'}</button>
+        <button class="btn" id="redoBtn">다시 쓰기</button>
+      </div></div>`;
+  } else if (pending) {
+    body = `<div class="center">
+      <h3>🎉 잘했어요! 오늘의 스티커를 골라요</h3>
+      <div class="stickers" id="stickers">${STICKERS.map((e, i) => `<button data-s="${e}" class="${i === 0 ? 'on' : ''}">${e}</button>`).join('')}</div>
+      <label class="f" for="note" style="text-align:left">오늘 문장을 쓰고 느낀 점 (안 써도 돼요)</label>
+      <textarea id="note" rows="2" maxlength="200" placeholder="예) 나도 포기하지 않고 줄넘기 연습을 해야겠다."></textarea>
+      <div style="margin-top:12px"><button class="btn primary big" id="saveDone">달력에 붙이기 ✨</button></div></div>`;
+  } else {
+    body = `<div class="modes" id="modes">${Object.entries(MODES).map(([k, v]) => `<button data-m="${k}" class="${k === mode ? 'on' : ''}">${v}</button>`).join('')}</div>`;
+    if (mode === 'paper') {
+      body += `<p class="center">📓 공책을 펴고 위 문장을 <b>또박또박</b> 따라 써 보세요.<br><span class="muted">띄어쓰기와 문장 부호도 똑같이!</span></p>
+        <button class="btn primary big finish">다 썼어요! ✨</button>`;
+    } else if (mode === 'trace') {
+      body += `<p class="muted center" style="margin-top:0">손가락이나 펜으로 흐린 글씨 위를 따라 써요.</p>
+        <div class="canvas-wrap"><canvas id="trace"></canvas></div>
+        <div class="row"><button class="btn" id="clearInk">🧽 지우기</button><button class="btn primary grow finish" disabled>다 썼어요! ✨</button></div>`;
+    } else {
+      body += `<div class="typeview" id="typeView"></div>
+        <textarea id="typed" rows="3" placeholder="여기에 문장을 똑같이 입력해 보세요"></textarea>
+        <div class="acc" id="acc">정확도 0%</div>
+        <button class="btn primary big finish" disabled>다 썼어요! ✨</button>`;
+    }
+  }
+  $('#day').innerHTML = head + body;
+  if (!future && !isDone(ds) && !pending) {
+    if (mode === 'trace') setupTrace(s.t);
+    if (mode === 'type') updateTyping();
+  }
+}
+
+// ---------- 화면에 따라 쓰기 ----------
+let tr = null;
+function wrapText(ctx, text, maxW) {
+  const lines = []; let line = '';
+  for (const word of text.split(' ')) {
+    const test = line ? line + ' ' + word : word;
+    if (ctx.measureText(test).width <= maxW) { line = test; continue; }
+    if (line) lines.push(line);
+    line = '';
+    for (const ch of word) {
+      if (ctx.measureText(line + ch).width > maxW && line) { lines.push(line); line = ''; }
+      line += ch;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+async function setupTrace(text) {
+  try { await document.fonts.load('40px "Gowun Batang"'); } catch (e) {}
+  const c = $('#trace'); if (!c) return;
+  const w = c.parentElement.clientWidth;
+  const fs = Math.round(Math.max(28, Math.min(54, w / 9)));
+  const ctx = c.getContext('2d');
+  const font = `${fs}px "Gowun Batang", "Batang", serif`;
+  ctx.font = font;
+  const lines = wrapText(ctx, text, w - 32);
+  const lh = Math.round(fs * 1.9), h = lines.length * lh + 20;
+  const dpr = window.devicePixelRatio || 1;
+  c.width = w * dpr; c.height = h * dpr; c.style.width = w + 'px'; c.style.height = h + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  tr = { c, ctx, lines, fs, lh, font, w, h, ink: 0, drawing: false, text };
+  drawGuide();
+  c.onpointerdown = e => {
+    tr.drawing = true; c.setPointerCapture(e.pointerId);
+    ctx.beginPath(); ctx.moveTo(e.offsetX, e.offsetY);
+    ctx.lineTo(e.offsetX + .1, e.offsetY + .1); ctx.stroke();
+  };
+  c.onpointermove = e => {
+    if (!tr.drawing) return;
+    ctx.lineTo(e.offsetX, e.offsetY); ctx.stroke();
+    tr.ink += Math.hypot(e.movementX || 0, e.movementY || 0) || 3;
+    if (tr.ink >= 200) { const b = $('.finish'); if (b) b.disabled = false; }
+  };
+  c.onpointerup = c.onpointercancel = () => { tr.drawing = false; };
+}
+function drawGuide() {
+  const { ctx, lines, fs, lh, font, w, h } = tr;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#fffdf8'; ctx.fillRect(0, 0, w, h);
+  lines.forEach((ln, i) => {
+    const base = 10 + lh * (i + 1) - Math.round(lh * .3);
+    ctx.strokeStyle = '#efe2d2'; ctx.lineWidth = 1; ctx.setLineDash([6, 6]);
+    ctx.beginPath(); ctx.moveTo(10, base + fs * .25); ctx.lineTo(w - 10, base + fs * .25); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#d9d1c9'; ctx.font = font; ctx.fillText(ln, 16, base);
+  });
+  ctx.strokeStyle = '#2f2a28'; ctx.lineWidth = Math.max(3, fs * .09); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+}
+
+// ---------- 타자로 쓰기 ----------
+function updateTyping() {
+  const ta = $('#typed'); if (!ta) return;
+  const target = sentenceFor(selDate).t;
+  const typed = ta.value.replace(/\s/g, '');
+  let k = 0, ok = 0, html = '';
+  for (const ch of target) {
+    if (/\s/.test(ch)) { html += ' '; continue; }
+    const c = typed[k];
+    const cls = c === undefined ? '' : c === ch ? 'ok' : 'ng';
+    if (cls === 'ok') ok++;
+    html += `<span class="${cls}">${esc(ch)}</span>`;
+    k++;
+  }
+  const acc = Math.round(ok / Math.max(k, typed.length, 1) * 100);
+  $('#typeView').innerHTML = html;
+  $('#acc').textContent = `정확도 ${acc}%` + (acc >= 90 ? ' 👍' : '');
+  $('.finish').disabled = acc < 90;
+}
+
+// ---------- 이벤트 ----------
+$('#cal').onclick = e => {
+  const b = e.target.closest('[data-d]'); if (!b) return;
+  selDate = b.dataset.d; pending = null;
+  renderCal(); renderDay();
+  $('#day').scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+$('#prevM').onclick = () => { viewM--; if (viewM < 0) { viewM = 11; viewY--; } renderStats(); renderCal(); };
+$('#nextM').onclick = () => { viewM++; if (viewM > 11) { viewM = 0; viewY++; } renderStats(); renderCal(); };
+
+$('#day').addEventListener('click', e => {
+  const t = e.target;
+  const m = t.closest('[data-m]');
+  if (m) { mode = m.dataset.m; data.lastMode = mode; save(); renderDay(); return; }
+  if (t.closest('#clearInk') && tr) { drawGuide(); tr.ink = 0; $('.finish').disabled = true; return; }
+  if (t.closest('#shuffle')) {
+    const p = pool(), cur = sentenceFor(selDate).t;
+    let next = p[Math.floor(Math.random() * p.length)];
+    for (let i = 0; i < 5 && next.t === cur && p.length > 1; i++) next = p[Math.floor(Math.random() * p.length)];
+    data.days[selDate] = { ...(data.days[selDate] || {}), done: false, sentence: next };
+    save(); renderDay(); return;
+  }
+  if (t.closest('.finish')) {
+    pending = { mode, typed: mode === 'type' ? $('#typed').value.trim() : '' };
+    renderDay(); return;
+  }
+  const st = t.closest('[data-s]');
+  if (st) { document.querySelectorAll('#stickers button').forEach(b => b.classList.toggle('on', b === st)); return; }
+  if (t.closest('#saveDone')) {
+    const sticker = (document.querySelector('#stickers .on') || {}).dataset?.s || '⭐';
+    data.days[selDate] = {
+      done: true, mode: pending.mode, typed: pending.typed, sticker,
+      note: $('#note').value.trim(), sentence: sentenceFor(selDate), at: Date.now(), parent: false,
+    };
+    pending = null; save();
+    F.celebrate([sticker, '✨', '🎉']);
+    const s = streak();
+    F.toast(s >= 2 && selDate === today() ? `🔥 ${s}일 연속 필사! 대단해요!` : '✍️ 달력에 스티커를 붙였어요!');
+    renderAll(); return;
+  }
+  if (t.closest('#parentBtn')) {
+    const r = data.days[selDate]; r.parent = !r.parent; save();
+    if (r.parent) F.toast('👍 부모님 확인 도장 쾅!');
+    renderCal(); renderDay(); return;
+  }
+  if (t.closest('#redoBtn')) {
+    if (!confirm('이 날의 필사 기록을 지우고 다시 쓸까요?')) return;
+    const keep = data.days[selDate].sentence;
+    data.days[selDate] = { done: false, sentence: keep };
+    save(); renderAll();
+  }
+});
+$('#day').addEventListener('input', e => { if (e.target.id === 'typed') updateTyping(); });
+
+$('#customForm').onsubmit = e => {
+  e.preventDefault();
+  const t = $('#cText').value.trim().replace(/\s+/g, ' ');
+  if (!t) return F.toast('문장을 적어 주세요');
+  data.custom.push({ id: F.uid(), t, s: $('#cSrc').value.trim() });
+  save(); $('#cText').value = ''; $('#cSrc').value = '';
+  F.toast('📝 문장을 추가했어요'); renderAll();
+};
+$('#customList').onclick = e => {
+  const b = e.target.closest('[data-cdel]'); if (!b) return;
+  if (!confirm('이 문장을 뺄까요?')) return;
+  data.custom = data.custom.filter(c => c.id !== b.dataset.cdel);
+  save(); renderAll();
+};
+function renderCustom() {
+  $('#customList').innerHTML = data.custom.length
+    ? data.custom.map(c => `<div class="custom-item"><div class="grow">${esc(c.t)}<div class="muted" style="font-size:13px">${esc(c.s || '우리 가족 문장')}</div></div><button class="btn small" data-cdel="${c.id}">빼기</button></div>`).join('')
+    : '<div class="muted" style="font-size:14px">아직 넣은 문장이 없어요.</div>';
+}
+
+let lastW = window.innerWidth;
+window.addEventListener('resize', () => {
+  if (Math.abs(window.innerWidth - lastW) < 40) return;
+  lastW = window.innerWidth;
+  if (mode === 'trace' && $('#trace') && !(tr && tr.ink > 0)) setupTrace(sentenceFor(selDate).t);
+});
+
+// ---------- 시작 ----------
+function resetView() {
+  const n = new Date(); viewY = n.getFullYear(); viewM = n.getMonth(); selDate = today(); pending = null;
+}
+load(); resetView();
+F.renderPicker($('#kids'), () => { load(); resetView(); renderAll(); });
+renderAll();
+</script>
+</body>
+</html>
