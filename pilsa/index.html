@@ -80,6 +80,7 @@
   <div class="topbar">
     <a class="home" href="../index.html" title="처음 화면">🏠</a>
     <h1>✍️ 필사 달력</h1>
+    <span class="sync-badge hidden"></span>
   </div>
 
   <div id="kids" class="kids"></div>
@@ -408,9 +409,20 @@ window.addEventListener('resize', () => {
 function resetView() {
   const n = new Date(); viewY = n.getFullYear(); viewM = n.getMonth(); selDate = today(); pending = null;
 }
+function onKid() { load(); resetView(); renderAll(); F.sync.pull(['pilsa.' + kid.id]); }
 load(); resetView();
-F.renderPicker($('#kids'), () => { load(); resetView(); renderAll(); });
+F.renderPicker($('#kids'), onKid);
 renderAll();
+
+// 구글 시트에 더 최신 기록이 있으면 받아서 다시 그림 (쓰는 중인 화면은 건드리지 않음)
+window.addEventListener('familysync', e => {
+  if (!e.detail.keys.some(k => k === 'family.kids' || k === 'pilsa.' + kid.id)) return;
+  load(); F.renderPicker($('#kids'), onKid);
+  renderStats(); renderCal(); renderCustom();
+  const busy = pending || (tr && tr.ink > 0 && $('#trace')) || (document.activeElement && document.activeElement.id === 'typed');
+  if (!busy) renderDay();
+});
+F.sync.pull(['family.kids', 'pilsa.' + kid.id]);
 </script>
 </body>
 </html>

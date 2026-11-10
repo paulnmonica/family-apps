@@ -65,11 +65,20 @@
   </div>
 
   <div class="card">
-    <h2>👧👦 오늘의 우리 아이들</h2>
+    <div class="row" style="justify-content:space-between;margin-bottom:6px">
+      <h2 style="margin:0">👧👦 오늘의 우리 아이들</h2>
+      <span class="sync-badge hidden" style="margin-left:0"></span>
+    </div>
     <div id="summary"></div>
+    <button class="btn big hidden" id="pullAllBtn" style="margin-top:10px">🔄 전체 기록 불러오기</button>
   </div>
 
-  <div class="card">
+  <div class="card" id="deviceCard">
+    <h2>📱 이 기기 설정 (구글 시트 연결)</h2>
+    <div id="deviceBody"></div>
+  </div>
+
+  <div class="card" id="kidCard">
     <details>
       <summary class="title" style="cursor:pointer;font-size:18px">⚙️ 아이 정보 바꾸기 (부모님용)</summary>
       <p class="muted">이름, 동물 아이콘, 태어난 해, 색깔을 바꿀 수 있어요. 태어난 해에 맞춰 필사 문장 난이도가 정해져요.</p>
@@ -82,7 +91,7 @@
 
   <div class="card">
     <h2>💾 백업 · 복원</h2>
-    <p class="muted" style="margin-top:0">기록은 이 컴퓨터(브라우저) 안에만 저장돼요. 가끔 백업 파일로 내려받아 두면 안전해요.</p>
+    <p class="muted" style="margin-top:0">기록은 이 기기(브라우저)에 저장되고, 구글 시트에 연결하면 시트에도 함께 저장돼요. 가끔 백업 파일로 내려받아 두면 더 안전해요.</p>
     <div class="row wrap-row">
       <button class="btn" id="exportBtn">⬇️ 백업 파일 내려받기</button>
       <button class="btn" id="importBtn">⬆️ 백업 파일로 복원</button>
@@ -114,19 +123,101 @@ function pilsaOf(id) {
   return { todayDone, streak: n };
 }
 
+function monthOf(id) {
+  const ym = F.ymd().slice(0, 7);
+  const tx = (F.getData('allowance.' + id, null) || {}).tx || [];
+  const days = (F.getData('pilsa.' + id, null) || {}).days || {};
+  const sum = t => tx.filter(x => x.type === t && x.date.startsWith(ym)).reduce((s, x) => s + x.amount, 0);
+  return { inS: sum('in'), outS: sum('out'), pilsa: Object.keys(days).filter(d => d.startsWith(ym) && days[d].done).length };
+}
+
 function renderSummary() {
-  $('#summary').innerHTML = F.kids().map(k => {
-    const m = walletOf(k.id), p = pilsaOf(k.id);
+  const parent = F.sync.role() === 'parent';
+  $('#summary').innerHTML = F.visibleKids().map(k => {
+    const m = walletOf(k.id), p = pilsaOf(k.id), mo = monthOf(k.id);
     return `<div class="kidrow">
       <div class="em" style="background:color-mix(in srgb, ${esc(k.color)} 20%, white)">${esc(k.emoji)}</div>
       <div class="info">
         <div class="nm">${esc(k.name)} <span class="sm">${F.gradeLabel(k.birthYear)}</span></div>
         <div class="sm">💰 지갑 ${F.won(m.w)}${m.p ? ` · 🐷 ${F.won(m.p)}` : ''}</div>
         <div class="sm">✍️ ${p.todayDone ? '오늘 필사 완료 ✅' : '오늘 필사 아직 ⏳'}${p.streak ? ` · 🔥 ${p.streak}일 연속` : ''}</div>
+        ${parent ? `<div class="sm">📅 이번 달: 받은 돈 ${F.won(mo.inS)} · 쓴 돈 ${F.won(mo.outS)} · 필사 ${mo.pilsa}일</div>` : ''}
       </div>
     </div>`;
   }).join('');
+  $('#pullAllBtn').classList.toggle('hidden', !(parent && F.sync.enabled()));
+  const role = F.sync.role();
+  $('#kidCard').classList.toggle('hidden', !!role && role !== 'parent');
 }
+
+// ---------- 이 기기 설정 ----------
+function renderDevice() {
+  const S = F.sync;
+  if (!S.configured()) {
+    $('#deviceBody').innerHTML = `<p class="muted" style="margin:0">아직 구글 시트가 연결되지 않았어요. 지금은 기록이 이 기기에만 저장돼요.</p>`;
+    return;
+  }
+  const role = S.role();
+  const who = role === 'parent' ? '👨‍👩‍👧 부모님' : (F.kids().find(k => k.id === role) || {}).name;
+  if (S.enabled()) {
+    const last = S.lastSync() ? new Date(S.lastSync()).toLocaleString('ko-KR') : '아직 없음';
+    $('#deviceBody').innerHTML = `
+      <p style="margin:0">이 기기는 <b>${esc(who || '')}</b> 기기로 연결되어 있어요.</p>
+      <p class="muted" style="margin:4px 0 12px;font-size:14px">마지막 동기화: ${esc(last)}${S.pendingCount() ? ` · 보낼 기록 ${S.pendingCount()}건` : ''}${S.lastError ? `<br>⚠️ ${esc(S.lastError)}` : ''}</p>
+      <div class="row wrap-row">
+        <button class="btn" id="syncNow">🔄 지금 동기화</button>
+        <button class="btn" id="disconnect" style="color:var(--muted)">연결 끊기</button>
+      </div>`;
+    return;
+  }
+  $('#deviceBody').innerHTML = `
+    <p class="muted" style="margin-top:0">기기마다 처음 한 번만 설정하면 돼요. 아이 기기는 그 아이의 기록만 보이고, 부모님 기기에서는 모든 아이의 기록을 볼 수 있어요.</p>
+    <form id="connectForm" autocomplete="off">
+      <label class="f" for="roleSel">이 기기는 누가 쓰나요?</label>
+      <select id="roleSel">
+        ${F.kids().map(k => `<option value="${esc(k.id)}">${esc(k.emoji)} ${esc(k.name)}</option>`).join('')}
+        <option value="parent">👨‍👩‍👧 부모님</option>
+      </select>
+      <label class="f" for="codeIn">가족 확인 코드</label>
+      <input id="codeIn" type="password" autocomplete="off" placeholder="부모님께 물어보세요">
+      <div style="margin-top:12px"><button class="btn primary big" type="submit">연결하기</button></div>
+    </form>`;
+}
+
+document.addEventListener('submit', async e => {
+  if (e.target.id !== 'connectForm') return;
+  e.preventDefault();
+  const code = $('#codeIn').value.trim(), role = $('#roleSel').value;
+  if (!code) return F.toast('가족 확인 코드를 입력해 주세요');
+  const btn = e.target.querySelector('button'); btn.disabled = true; btn.textContent = '연결하는 중…';
+  try {
+    await F.sync.connect(code, role);
+    F.toast('☁️ 연결됐어요!');
+  } catch (err) {
+    alert('연결하지 못했어요: ' + err.message);
+  }
+  refresh();
+});
+
+document.addEventListener('click', async e => {
+  if (e.target.closest('#syncNow')) { await F.sync.flush(); await F.sync.pull(); F.toast('동기화했어요'); refresh(); }
+  if (e.target.closest('#disconnect')) {
+    if (!confirm('이 기기의 구글 시트 연결을 끊을까요?\n(이 기기에 있는 기록은 그대로 남아요)')) return;
+    F.sync.disconnect(); refresh();
+  }
+});
+
+$('#pullAllBtn').onclick = async () => {
+  const b = $('#pullAllBtn'); b.disabled = true; b.textContent = '불러오는 중…';
+  await F.sync.flush();
+  const ch = await F.sync.pull();
+  b.disabled = false; b.textContent = '🔄 전체 기록 불러오기';
+  F.toast(F.sync.lastError ? '⚠️ ' + F.sync.lastError : ch.length ? `새 기록 ${ch.length}건을 불러왔어요` : '이미 최신 기록이에요');
+  refresh();
+};
+
+function refresh() { renderSummary(); renderEdit(); renderDevice(); F.sync.render(); }
+window.addEventListener('familysync', refresh);
 
 function renderEdit() {
   const thisYear = new Date().getFullYear();
@@ -162,9 +253,9 @@ $('#importFile').onchange = e => {
   e.target.value = '';
 };
 
-renderSummary();
-renderEdit();
-window.addEventListener('pageshow', renderSummary);
+refresh();
+window.addEventListener('pageshow', () => { renderSummary(); renderDevice(); });
+F.sync.pull();
 </script>
 </body>
 </html>

@@ -97,6 +97,11 @@ label.f { display: block; margin: 14px 0 6px; font-weight: bold; font-size: 14px
 .confetti { position: fixed; top: -40px; font-size: 28px; z-index: 98; pointer-events: none; animation: fall linear forwards; }
 @keyframes fall { to { transform: translateY(110vh) rotate(540deg); } }
 
+.sync-badge {
+  margin-left: auto; font-size: 13px; background: #fff; border-radius: 999px; padding: 4px 10px;
+  box-shadow: var(--shadow); color: var(--muted); white-space: nowrap;
+}
+
 /* 휴대폰 화면 */
 @media (max-width: 480px) {
   .wrap { padding: calc(12px + env(safe-area-inset-top)) 12px calc(60px + env(safe-area-inset-bottom)); }

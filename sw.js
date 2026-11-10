@@ -1,6 +1,6 @@
 // 인터넷이 없어도 앱이 열리도록 파일을 휴대폰에 저장해 두는 서비스 워커
 // 앱 파일을 고친 뒤에는 VERSION 숫자를 올려 주세요. 그래야 휴대폰에 새 버전이 들어가요.
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = 'family-apps-' + VERSION;
 const FILES = [
   './', './index.html', './manifest.webmanifest',
