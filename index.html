@@ -4,12 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#ff8a3d">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="우리앱">
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icons/icon-192.png">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="allowance/icons/icon-192.png">
 <title>우리 아이들 앱</title>
 <link rel="stylesheet" href="shared/common.css">
 <style>
@@ -18,244 +13,56 @@
   .hero p { margin: 6px 0 0; color: var(--muted); }
   .apps { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 18px 0; }
   .app {
-    display: block; text-decoration: none; color: var(--ink); border-radius: 22px; padding: 22px 18px; box-shadow: var(--shadow);
-    transition: transform .15s;
+    display: flex; gap: 14px; align-items: center; text-decoration: none; color: var(--ink); border-radius: 22px; padding: 18px;
+    box-shadow: var(--shadow); transition: transform .15s;
   }
   .app:active { transform: scale(.97); }
-  .app .ico { font-size: 52px; line-height: 1; }
-  .app h2 { margin: 10px 0 4px; font-size: 22px; }
+  .app img { width: 72px; height: 72px; border-radius: 18px; flex: none; }
+  .app h2 { margin: 0 0 4px; font-size: 22px; }
   .app p { margin: 0; font-size: 14px; color: #6b5e57; }
   .app.money { background: linear-gradient(135deg, #ffe4c7, #fff3e3); }
   .app.pilsa { background: linear-gradient(135deg, #c9f5e2, #ecfdf5); }
-
-  .kidrow { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px dashed var(--line); }
-  .kidrow:last-child { border-bottom: 0; }
-  .kidrow .em { font-size: 34px; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; flex: none; }
-  .kidrow .info { flex: 1; min-width: 0; }
-  .kidrow .nm { font-family: 'Jua', sans-serif; font-size: 19px; }
-  .kidrow .sm { font-size: 14px; color: var(--muted); }
-
-  .edit-grid { display: grid; grid-template-columns: 64px 1fr 110px 48px; gap: 8px; align-items: center; margin-bottom: 8px; }
-  .edit-grid input[type=color] { padding: 2px; height: 44px; }
-  .edit-grid .emo { text-align: center; font-size: 22px; padding: 6px; }
-  @media (max-width: 480px) {
-    .apps { grid-template-columns: 1fr; }
-    .edit-grid { grid-template-columns: 56px 1fr 92px 44px; gap: 6px; }
-  }
+  ol { padding-left: 20px; margin: 0; }
+  li { margin: 4px 0; }
+  @media (max-width: 560px) { .apps { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="hero">
     <h1>🌟 우리 아이들 앱</h1>
-    <p>아빠·엄마가 너희에게 주는 작은 선물이야 💝</p>
+    <p>두 앱은 따로따로 설치해요. 아이에게 필요한 앱만 골라 주세요.</p>
   </div>
 
   <div class="apps">
-    <a class="app money" href="allowance/index.html">
-      <div class="ico">💰</div>
-      <h2>용돈기입장</h2>
-      <p>받은 돈, 쓴 돈을 적고 갖고 싶은 것을 위해 저금해요</p>
+    <a class="app money" href="allowance/">
+      <img src="allowance/icons/icon-192.png" alt="">
+      <div><h2>용돈기입장</h2><p>받은 돈, 쓴 돈을 적고 갖고 싶은 것을 위해 저금해요</p></div>
     </a>
-    <a class="app pilsa" href="pilsa/index.html">
-      <div class="ico">✍️</div>
-      <h2>필사 달력</h2>
-      <p>매일 좋은 문장을 따라 쓰고 달력에 스티커를 모아요</p>
+    <a class="app pilsa" href="pilsa/">
+      <img src="pilsa/icons/icon-192.png" alt="">
+      <div><h2>필사 달력</h2><p>매일 좋은 문장을 따라 쓰고 달력에 스티커를 모아요</p></div>
     </a>
   </div>
 
   <div class="card">
-    <div class="row" style="justify-content:space-between;margin-bottom:6px">
-      <h2 style="margin:0">👧👦 오늘의 우리 아이들</h2>
-      <span class="sync-badge hidden" style="margin-left:0"></span>
-    </div>
-    <div id="summary"></div>
-    <button class="btn big hidden" id="pullAllBtn" style="margin-top:10px">🔄 전체 기록 불러오기</button>
-  </div>
-
-  <div class="card" id="deviceCard">
-    <h2>📱 이 기기 설정 (구글 시트 연결)</h2>
-    <div id="deviceBody"></div>
-  </div>
-
-  <div class="card" id="kidCard">
-    <details>
-      <summary class="title" style="cursor:pointer;font-size:18px">⚙️ 아이 정보 바꾸기 (부모님용)</summary>
-      <p class="muted">이름, 동물 아이콘, 태어난 해, 색깔을 바꿀 수 있어요. 태어난 해에 맞춰 필사 문장 난이도가 정해져요.</p>
-      <form id="kidForm">
-        <div id="kidEdit"></div>
-        <button class="btn primary" type="submit" style="margin-top:6px">저장</button>
-      </form>
-    </details>
-  </div>
-
-  <div class="card">
-    <h2>💾 백업 · 복원</h2>
-    <p class="muted" style="margin-top:0">기록은 이 기기(브라우저)에 저장되고, 구글 시트에 연결하면 시트에도 함께 저장돼요. 가끔 백업 파일로 내려받아 두면 더 안전해요.</p>
-    <div class="row wrap-row">
-      <button class="btn" id="exportBtn">⬇️ 백업 파일 내려받기</button>
-      <button class="btn" id="importBtn">⬆️ 백업 파일로 복원</button>
-      <input type="file" id="importFile" accept=".json,application/json" class="hidden">
-    </div>
+    <h2>📲 설치하는 방법 (부모님용)</h2>
+    <ol>
+      <li>위에서 설치할 앱을 눌러 열어요.</li>
+      <li>안드로이드(크롬): 메뉴 ⋮ → <b>홈 화면에 추가</b> 또는 <b>앱 설치</b></li>
+      <li>아이폰(사파리): 공유 버튼 → <b>홈 화면에 추가</b></li>
+      <li>컴퓨터(크롬·엣지): 주소창 오른쪽의 <b>설치</b> 아이콘</li>
+      <li>앱을 처음 열면 <b>⚙️ 설정 → 이 기기 설정</b>에서 누가 쓰는 기기인지 골라요.</li>
+    </ol>
   </div>
 </div>
-
-<script src="shared/common.js"></script>
 <script>
-const F = Family, $ = s => document.querySelector(s), esc = F.esc;
-
-function walletOf(id) {
-  const d = F.getData('allowance.' + id, null);
-  if (!d || !d.tx) return { w: 0, p: 0 };
-  const w = d.tx.reduce((s, t) => s + ((t.type === 'in' || t.type === 'unsave') ? 1 : -1) * t.amount, 0);
-  const p = (d.goals || []).filter(g => !g.done).reduce((s, g) => s + g.saved, 0);
-  return { w, p };
+// 두 앱이 하나였던 시절의 서비스 워커 정리
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations()
+    .then(rs => rs.filter(r => r.scope === new URL('./', location.href).href).forEach(r => r.unregister()))
+    .catch(() => {});
 }
-function pilsaOf(id) {
-  const d = F.getData('pilsa.' + id, null);
-  const days = (d && d.days) || {};
-  const done = k => !!(days[k] && days[k].done);
-  const dt = new Date();
-  const todayDone = done(F.ymd(dt));
-  if (!todayDone) dt.setDate(dt.getDate() - 1);
-  let n = 0;
-  while (done(F.ymd(dt))) { n++; dt.setDate(dt.getDate() - 1); }
-  return { todayDone, streak: n };
-}
-
-function monthOf(id) {
-  const ym = F.ymd().slice(0, 7);
-  const tx = (F.getData('allowance.' + id, null) || {}).tx || [];
-  const days = (F.getData('pilsa.' + id, null) || {}).days || {};
-  const sum = t => tx.filter(x => x.type === t && x.date.startsWith(ym)).reduce((s, x) => s + x.amount, 0);
-  return { inS: sum('in'), outS: sum('out'), pilsa: Object.keys(days).filter(d => d.startsWith(ym) && days[d].done).length };
-}
-
-function renderSummary() {
-  const parent = F.sync.role() === 'parent';
-  $('#summary').innerHTML = F.visibleKids().map(k => {
-    const m = walletOf(k.id), p = pilsaOf(k.id), mo = monthOf(k.id);
-    return `<div class="kidrow">
-      <div class="em" style="background:color-mix(in srgb, ${esc(k.color)} 20%, white)">${esc(k.emoji)}</div>
-      <div class="info">
-        <div class="nm">${esc(k.name)} <span class="sm">${F.gradeLabel(k.birthYear)}</span></div>
-        <div class="sm">💰 지갑 ${F.won(m.w)}${m.p ? ` · 🐷 ${F.won(m.p)}` : ''}</div>
-        <div class="sm">✍️ ${p.todayDone ? '오늘 필사 완료 ✅' : '오늘 필사 아직 ⏳'}${p.streak ? ` · 🔥 ${p.streak}일 연속` : ''}</div>
-        ${parent ? `<div class="sm">📅 이번 달: 받은 돈 ${F.won(mo.inS)} · 쓴 돈 ${F.won(mo.outS)} · 필사 ${mo.pilsa}일</div>` : ''}
-      </div>
-    </div>`;
-  }).join('');
-  $('#pullAllBtn').classList.toggle('hidden', !(parent && F.sync.enabled()));
-  const role = F.sync.role();
-  $('#kidCard').classList.toggle('hidden', !!role && role !== 'parent');
-}
-
-// ---------- 이 기기 설정 ----------
-function renderDevice() {
-  const S = F.sync;
-  if (!S.configured()) {
-    $('#deviceBody').innerHTML = `<p class="muted" style="margin:0">아직 구글 시트가 연결되지 않았어요. 지금은 기록이 이 기기에만 저장돼요.</p>`;
-    return;
-  }
-  const role = S.role();
-  const who = role === 'parent' ? '👨‍👩‍👧 부모님' : (F.kids().find(k => k.id === role) || {}).name;
-  if (S.enabled()) {
-    const last = S.lastSync() ? new Date(S.lastSync()).toLocaleString('ko-KR') : '아직 없음';
-    $('#deviceBody').innerHTML = `
-      <p style="margin:0">이 기기는 <b>${esc(who || '')}</b> 기기로 연결되어 있어요.</p>
-      <p class="muted" style="margin:4px 0 12px;font-size:14px">마지막 동기화: ${esc(last)}${S.pendingCount() ? ` · 보낼 기록 ${S.pendingCount()}건` : ''}${S.lastError ? `<br>⚠️ ${esc(S.lastError)}` : ''}</p>
-      <div class="row wrap-row">
-        <button class="btn" id="syncNow">🔄 지금 동기화</button>
-        <button class="btn" id="disconnect" style="color:var(--muted)">연결 끊기</button>
-      </div>`;
-    return;
-  }
-  $('#deviceBody').innerHTML = `
-    <p class="muted" style="margin-top:0">기기마다 처음 한 번만 설정하면 돼요. 아이 기기는 그 아이의 기록만 보이고, 부모님 기기에서는 모든 아이의 기록을 볼 수 있어요.</p>
-    <form id="connectForm" autocomplete="off">
-      <label class="f" for="roleSel">이 기기는 누가 쓰나요?</label>
-      <select id="roleSel">
-        ${F.kids().map(k => `<option value="${esc(k.id)}">${esc(k.emoji)} ${esc(k.name)}</option>`).join('')}
-        <option value="parent">👨‍👩‍👧 부모님</option>
-      </select>
-      <label class="f" for="codeIn">가족 확인 코드</label>
-      <input id="codeIn" type="password" autocomplete="off" placeholder="부모님께 물어보세요">
-      <div style="margin-top:12px"><button class="btn primary big" type="submit">연결하기</button></div>
-    </form>`;
-}
-
-document.addEventListener('submit', async e => {
-  if (e.target.id !== 'connectForm') return;
-  e.preventDefault();
-  const code = $('#codeIn').value.trim(), role = $('#roleSel').value;
-  if (!code) return F.toast('가족 확인 코드를 입력해 주세요');
-  const btn = e.target.querySelector('button'); btn.disabled = true; btn.textContent = '연결하는 중…';
-  try {
-    await F.sync.connect(code, role);
-    F.toast('☁️ 연결됐어요!');
-  } catch (err) {
-    alert('연결하지 못했어요: ' + err.message);
-  }
-  refresh();
-});
-
-document.addEventListener('click', async e => {
-  if (e.target.closest('#syncNow')) { await F.sync.flush(); await F.sync.pull(); F.toast('동기화했어요'); refresh(); }
-  if (e.target.closest('#disconnect')) {
-    if (!confirm('이 기기의 구글 시트 연결을 끊을까요?\n(이 기기에 있는 기록은 그대로 남아요)')) return;
-    F.sync.disconnect(); refresh();
-  }
-});
-
-$('#pullAllBtn').onclick = async () => {
-  const b = $('#pullAllBtn'); b.disabled = true; b.textContent = '불러오는 중…';
-  await F.sync.flush();
-  const ch = await F.sync.pull();
-  b.disabled = false; b.textContent = '🔄 전체 기록 불러오기';
-  F.toast(F.sync.lastError ? '⚠️ ' + F.sync.lastError : ch.length ? `새 기록 ${ch.length}건을 불러왔어요` : '이미 최신 기록이에요');
-  refresh();
-};
-
-function refresh() { renderSummary(); renderEdit(); renderDevice(); F.sync.render(); }
-window.addEventListener('familysync', refresh);
-
-function renderEdit() {
-  const thisYear = new Date().getFullYear();
-  const years = []; for (let y = thisYear; y >= thisYear - 20; y--) years.push(y);
-  $('#kidEdit').innerHTML = F.kids().map(k => `
-    <div class="edit-grid" data-id="${esc(k.id)}">
-      <input class="emo" maxlength="4" value="${esc(k.emoji)}" aria-label="아이콘">
-      <input class="nm" maxlength="10" value="${esc(k.name)}" aria-label="이름">
-      <select class="by" aria-label="태어난 해">${years.map(y => `<option ${y === k.birthYear ? 'selected' : ''}>${y}</option>`).join('')}</select>
-      <input type="color" class="co" value="${esc(k.color)}" aria-label="색깔">
-    </div>`).join('');
-}
-
-$('#kidForm').onsubmit = e => {
-  e.preventDefault();
-  const list = [...document.querySelectorAll('#kidEdit .edit-grid')].map(r => ({
-    id: r.dataset.id,
-    emoji: r.querySelector('.emo').value.trim() || '🙂',
-    name: r.querySelector('.nm').value.trim() || '아이',
-    birthYear: Number(r.querySelector('.by').value),
-    color: r.querySelector('.co').value,
-  }));
-  F.saveKids(list);
-  F.toast('저장했어요!');
-  renderSummary();
-};
-
-$('#exportBtn').onclick = () => F.exportAll();
-$('#importBtn').onclick = () => $('#importFile').click();
-$('#importFile').onchange = e => {
-  const f = e.target.files[0]; if (!f) return;
-  F.importAll(f, () => { F.toast('복원했어요!'); renderSummary(); renderEdit(); });
-  e.target.value = '';
-};
-
-refresh();
-window.addEventListener('pageshow', () => { renderSummary(); renderDevice(); });
-F.sync.pull();
 </script>
 </body>
 </html>

@@ -1,15 +1,15 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" data-app="pilsa">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#ff8a3d">
+<meta name="theme-color" content="#10b981">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="우리앱">
-<link rel="manifest" href="../manifest.webmanifest">
-<link rel="icon" href="../icons/icon-192.png">
-<link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="필사달력">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <title>필사 달력</title>
 <link rel="stylesheet" href="../shared/common.css">
 <style>
@@ -78,11 +78,14 @@
 <body>
 <div class="wrap">
   <div class="topbar">
-    <a class="home" href="../index.html" title="처음 화면">🏠</a>
     <h1>✍️ 필사 달력</h1>
     <span class="sync-badge hidden"></span>
+    <button class="settings-btn" id="setBtn" title="설정">⚙️</button>
   </div>
 
+  <section id="settings" class="hidden"></section>
+
+  <div id="main">
   <div id="kids" class="kids"></div>
 
   <div class="card">
@@ -110,6 +113,7 @@
       </form>
       <div id="customList" style="margin-top:10px"></div>
     </details>
+  </div>
   </div>
 </div>
 
@@ -413,6 +417,16 @@ function onKid() { load(); resetView(); renderAll(); F.sync.pull(['pilsa.' + kid
 load(); resetView();
 F.renderPicker($('#kids'), onKid);
 renderAll();
+
+// ⚙️ 설정 화면 (기기 연결 · 아이 정보 · 백업)
+F.mountSettings($('#settings'), () => { load(); resetView(); F.renderPicker($('#kids'), onKid); renderAll(); });
+$('#setBtn').onclick = () => {
+  const open = $('#settings').classList.toggle('hidden') === false;
+  $('#main').classList.toggle('hidden', open);
+  $('#setBtn').textContent = open ? '✕' : '⚙️';
+  $('#setBtn').title = open ? '설정 닫기' : '설정';
+  if (!open && mode === 'trace' && $('#trace') && !(tr && tr.ink > 0)) setupTrace(sentenceFor(selDate).t);
+};
 
 // 구글 시트에 더 최신 기록이 있으면 받아서 다시 그림 (쓰는 중인 화면은 건드리지 않음)
 window.addEventListener('familysync', e => {

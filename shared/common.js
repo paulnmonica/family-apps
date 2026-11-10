@@ -1,17 +1,28 @@
-// 우리 가족 앱 공통 기능: 아이 프로필, 저장, 백업, 알림
+// 우리 아이들 앱 공통 기능: 아이 프로필, 저장, 백업, 알림, 설정 화면
+// 용돈기입장과 필사 달력은 따로 설치되는 앱이에요. 각 앱은 <html data-app="allowance|pilsa">로 자기를 알려 줘요.
 (function () {
+  const APP = document.documentElement.dataset.app;
+
   // 휴대폰 앱처럼 설치·오프라인 사용 (https 또는 localhost에서만 동작)
   const ROOT = new URL('../', document.currentScript.src);
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
-    window.addEventListener('load', () => navigator.serviceWorker.register(new URL('sw.js', ROOT)).catch(() => {}));
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register(new URL('sw.js', location.href)).catch(() => {});
+      // 두 앱이 하나였던 시절의 서비스 워커(사이트 맨 위)는 정리
+      navigator.serviceWorker.getRegistrations()
+        .then(rs => rs.filter(r => r.scope === ROOT.href).forEach(r => r.unregister()))
+        .catch(() => {});
+    });
   }
 
   const KIDS_KEY = 'family.kids';
   const CUR_KEY = 'family.current';
-  const PREFIXES = ['family.', 'allowance.', 'pilsa.'];
+  // 이 앱의 기록 + 두 앱이 함께 쓰는 아이 정보
+  const PREFIXES = ['family.', APP + '.'];
 
+  // 초등학생 두 명만 써요. 큰아이(k1)는 쓰지 않아서 목록에서 빼요. (기존 기록이 맞게 이어지도록 id는 그대로)
+  const RETIRED = ['k1'];
   const DEFAULT_KIDS = [
-    { id: 'k1', name: '첫째', birthYear: 2011, emoji: '🦁', color: '#f59e0b' },
     { id: 'k2', name: '둘째', birthYear: 2016, emoji: '🐰', color: '#ec4899' },
     { id: 'k3', name: '셋째', birthYear: 2017, emoji: '🐻', color: '#3b82f6' },
   ];
@@ -22,12 +33,14 @@
     catch (e) { alert('저장하지 못했어요. 저장 공간이 부족하거나 브라우저가 저장을 막고 있어요.'); return false; }
   }
   const pad = n => String(n).padStart(2, '0');
+  const APP_NAME = { allowance: '용돈기입장', pilsa: '필사달력' };
 
   const F = window.Family = {
     kids() {
       try {
         const v = JSON.parse(safeGet(KIDS_KEY));
-        if (Array.isArray(v) && v.length) return v;
+        const list = Array.isArray(v) ? v.filter(k => !RETIRED.includes(k.id)) : [];
+        if (list.length) return list;
       } catch (e) {}
       return DEFAULT_KIDS.map(k => ({ ...k }));
     },
@@ -127,7 +140,7 @@
       const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `우리가족앱-백업-${F.ymd()}.json`;
+      a.download = `${APP_NAME[APP] || '우리아이들앱'}-백업-${F.ymd()}.json`;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     },
@@ -175,17 +188,17 @@
     lastSync() { return Number(safeGet(S_LAST)) || 0; },
     pendingCount() { const m = readMeta(); return Object.keys(m).filter(k => m[k].dirty && S.canWrite(k)).length; },
 
-    // 아이 기기는 자기 기록만, 부모 기기는 모든 기록을 올릴 수 있음
+    // 아이 기기는 자기 기록만, 부모 기기는 아이 정보와 모든 아이의 기록을 올릴 수 있음 (이 앱의 기록만)
     canWrite(key) {
       const r = S.role();
-      if (r === 'parent') return true;
+      if (r === 'parent') return key === KIDS_KEY || key.startsWith(APP + '.');
       if (!r) return false;
-      return key === 'allowance.' + r || key === 'pilsa.' + r;
+      return key === APP + '.' + r;
     },
     myKeys() {
       const r = S.role();
-      if (r === 'parent') return [KIDS_KEY, ...F.kids().flatMap(k => ['allowance.' + k.id, 'pilsa.' + k.id])];
-      return r ? [KIDS_KEY, 'allowance.' + r, 'pilsa.' + r] : [];
+      if (r === 'parent') return [KIDS_KEY, ...F.kids().map(k => APP + '.' + k.id)];
+      return r ? [KIDS_KEY, APP + '.' + r] : [];
     },
 
     touch(key) {
@@ -278,7 +291,7 @@
         throw e;
       }
       if (role !== 'parent') {
-        const mine = ['allowance.' + role, 'pilsa.' + role];
+        const mine = [APP + '.' + role];
         const server = (await S.call('get', { keys: mine })).items || [];
         const local = mine.filter(k => safeGet(k) != null);
         let useServer = server.length > 0;
@@ -314,7 +327,149 @@
     },
   };
 
+  // ================= 설정 화면 (기기 연결 · 아이 정보 · 백업) =================
+  // 두 앱이 똑같이 씀. 아이 기기나 연결이 바뀌면 onChange()로 앱 화면을 다시 그리게 해요.
+  F.mountSettings = (el, onChange) => {
+    const esc = F.esc;
+    el.innerHTML = `
+      <div class="card">
+        <h2>📱 이 기기 설정 (구글 시트 연결)</h2>
+        <div data-set="device"></div>
+      </div>
+      <div class="card" data-set="kidCard">
+        <h2>👧👦 아이 정보 (부모님용)</h2>
+        <p class="muted" style="margin-top:0">이름, 동물 아이콘, 태어난 해, 색깔을 바꿀 수 있어요.${APP === 'pilsa' ? ' 태어난 해에 맞춰 필사 문장 난이도가 정해져요.' : ''}</p>
+        <form data-set="kidForm">
+          <div data-set="kids"></div>
+          <button class="btn primary" type="submit" style="margin-top:6px">저장</button>
+        </form>
+      </div>
+      <div class="card">
+        <h2>💾 백업 · 복원</h2>
+        <p class="muted" style="margin-top:0">기록은 이 기기(브라우저)에 저장되고, 구글 시트에 연결하면 시트에도 함께 저장돼요. 가끔 백업 파일로 내려받아 두면 더 안전해요.</p>
+        <div class="row wrap-row">
+          <button class="btn" type="button" data-set="export">⬇️ 백업 파일 내려받기</button>
+          <button class="btn" type="button" data-set="import">⬆️ 백업 파일로 복원</button>
+          <input type="file" data-set="file" accept=".json,application/json" class="hidden">
+        </div>
+      </div>`;
+    const $s = n => el.querySelector(`[data-set="${n}"]`);
+    const changed = () => { render(); onChange && onChange(); };
+
+    function renderDevice() {
+      const box = $s('device');
+      if (!S.configured()) {
+        box.innerHTML = `<p class="muted" style="margin:0">아직 구글 시트가 연결되지 않았어요. 지금은 기록이 이 기기에만 저장돼요.</p>`;
+        return;
+      }
+      const role = S.role();
+      const who = role === 'parent' ? '👨‍👩‍👧 부모님' : (F.kids().find(k => k.id === role) || {}).name;
+      if (S.enabled()) {
+        const last = S.lastSync() ? new Date(S.lastSync()).toLocaleString('ko-KR') : '아직 없음';
+        box.innerHTML = `
+          <p style="margin:0">이 기기는 <b>${esc(who || '')}</b> 기기로 연결되어 있어요.</p>
+          <p class="muted" style="margin:4px 0 12px;font-size:14px">마지막 동기화: ${esc(last)}${S.pendingCount() ? ` · 보낼 기록 ${S.pendingCount()}건` : ''}${S.lastError ? `<br>⚠️ ${esc(S.lastError)}` : ''}</p>
+          <div class="row wrap-row">
+            <button class="btn" type="button" data-act="syncNow">🔄 지금 동기화</button>
+            <button class="btn" type="button" data-act="disconnect" style="color:var(--muted)">연결 끊기</button>
+          </div>`;
+        return;
+      }
+      box.innerHTML = `
+        <p class="muted" style="margin-top:0">기기마다 처음 한 번만 설정하면 돼요. 아이 기기는 그 아이의 기록만 보이고, 부모님 기기에서는 두 아이의 기록을 모두 볼 수 있어요.</p>
+        <form data-set="connect" autocomplete="off">
+          <label class="f" for="setRole">이 기기는 누가 쓰나요?</label>
+          <select id="setRole" data-set="role">
+            ${F.kids().map(k => `<option value="${esc(k.id)}">${esc(k.emoji)} ${esc(k.name)}</option>`).join('')}
+            <option value="parent">👨‍👩‍👧 부모님</option>
+          </select>
+          <label class="f" for="setCode">가족 확인 코드</label>
+          <input id="setCode" data-set="code" type="password" autocomplete="off" placeholder="부모님께 물어보세요">
+          <div style="margin-top:12px"><button class="btn primary big" type="submit">연결하기</button></div>
+        </form>`;
+    }
+
+    function renderKids() {
+      const role = S.role();
+      $s('kidCard').classList.toggle('hidden', !!role && role !== 'parent');
+      const thisYear = new Date().getFullYear();
+      const years = []; for (let y = thisYear; y >= thisYear - 20; y--) years.push(y);
+      $s('kids').innerHTML = F.kids().map(k => `
+        <div class="edit-grid" data-id="${esc(k.id)}">
+          <input class="emo" maxlength="4" value="${esc(k.emoji)}" aria-label="아이콘">
+          <input class="nm" maxlength="10" value="${esc(k.name)}" aria-label="이름">
+          <select class="by" aria-label="태어난 해">${years.map(y => `<option ${y === k.birthYear ? 'selected' : ''}>${y}</option>`).join('')}</select>
+          <input type="color" class="co" value="${esc(k.color)}" aria-label="색깔">
+        </div>`).join('');
+    }
+
+    function render() { renderDevice(); renderKids(); S.render(); }
+
+    el.addEventListener('submit', async e => {
+      e.preventDefault();
+      const form = e.target.closest('[data-set]');
+      if (!form) return;
+      if (form.dataset.set === 'connect') {
+        const code = $s('code').value.trim(), role = $s('role').value;
+        if (!code) return F.toast('가족 확인 코드를 입력해 주세요');
+        const btn = form.querySelector('button'); btn.disabled = true; btn.textContent = '연결하는 중…';
+        try {
+          await S.connect(code, role);
+          F.toast('☁️ 연결됐어요!');
+        } catch (err) {
+          alert('연결하지 못했어요: ' + err.message);
+        }
+        changed();
+      } else if (form.dataset.set === 'kidForm') {
+        const list = [...form.querySelectorAll('.edit-grid')].map(r => ({
+          id: r.dataset.id,
+          emoji: r.querySelector('.emo').value.trim() || '🙂',
+          name: r.querySelector('.nm').value.trim() || '아이',
+          birthYear: Number(r.querySelector('.by').value),
+          color: r.querySelector('.co').value,
+        }));
+        F.saveKids(list);
+        F.toast('저장했어요!');
+        changed();
+      }
+    });
+
+    el.addEventListener('click', async e => {
+      const a = e.target.closest('[data-act], [data-set="export"], [data-set="import"]');
+      if (!a) return;
+      if (a.dataset.set === 'export') return F.exportAll();
+      if (a.dataset.set === 'import') return $s('file').click();
+      if (a.dataset.act === 'syncNow') {
+        a.disabled = true; a.textContent = '동기화하는 중…';
+        await S.flush();
+        const ch = await S.pull();
+        F.toast(S.lastError ? '⚠️ ' + S.lastError : ch.length ? `새 기록 ${ch.length}건을 불러왔어요` : '이미 최신 기록이에요');
+        render();
+      }
+      if (a.dataset.act === 'disconnect') {
+        if (!confirm('이 기기의 구글 시트 연결을 끊을까요?\n(이 기기에 있는 기록은 그대로 남아요)')) return;
+        S.disconnect(); changed();
+      }
+    });
+
+    $s('file').onchange = e => {
+      const f = e.target.files[0]; if (!f) return;
+      F.importAll(f, () => { F.toast('복원했어요!'); changed(); });
+      e.target.value = '';
+    };
+
+    window.addEventListener('familysync', render);
+    render();
+  };
+
   window.addEventListener('online', () => S.flush());
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') S.flush(); });
-  document.addEventListener('DOMContentLoaded', () => { S.render(); S.flush(); });
+  document.addEventListener('DOMContentLoaded', () => {
+    // 부모님 기기에서는 큰아이를 뺀 아이 목록을 구글 시트에도 저장
+    if (S.role() === 'parent') {
+      const raw = F.getData(KIDS_KEY, null);
+      if (Array.isArray(raw) && raw.some(k => RETIRED.includes(k.id))) F.saveKids(F.kids());
+    }
+    S.render(); S.flush();
+  });
 })();

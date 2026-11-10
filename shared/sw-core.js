@@ -1,14 +1,6 @@
-// 인터넷이 없어도 앱이 열리도록 파일을 휴대폰에 저장해 두는 서비스 워커
-// 앱 파일을 고친 뒤에는 VERSION 숫자를 올려 주세요. 그래야 휴대폰에 새 버전이 들어가요.
-const VERSION = 'v2';
-const CACHE = 'family-apps-' + VERSION;
-const FILES = [
-  './', './index.html', './manifest.webmanifest',
-  './shared/common.css', './shared/common.js',
-  './allowance/index.html',
-  './pilsa/index.html', './pilsa/sentences.js',
-  './icons/icon-192.png', './icons/icon-512.png',
-];
+// 두 앱이 함께 쓰는 서비스 워커 본체 (인터넷이 없어도 앱이 열리도록 파일을 저장해 둠)
+// 각 앱의 sw.js가 APP, VERSION, FILES를 정한 뒤 이 파일을 불러와요.
+const CACHE = APP + '-' + VERSION;
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
@@ -17,7 +9,8 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k.startsWith('family-apps-') && k !== CACHE).map(k => caches.delete(k))))
+      // 이 앱의 옛 버전과, 두 앱이 하나였던 시절의 저장본(family-apps-)을 지움
+      .then(keys => Promise.all(keys.filter(k => (k.startsWith(APP + '-') && k !== CACHE) || k.startsWith('family-apps-')).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });

@@ -101,6 +101,16 @@ label.f { display: block; margin: 14px 0 6px; font-weight: bold; font-size: 14px
   margin-left: auto; font-size: 13px; background: #fff; border-radius: 999px; padding: 4px 10px;
   box-shadow: var(--shadow); color: var(--muted); white-space: nowrap;
 }
+.topbar .settings-btn {
+  border: 0; font-size: 20px; width: 42px; height: 42px; display: grid; place-items: center; flex: none;
+  background: #fff; border-radius: 50%; box-shadow: var(--shadow); cursor: pointer; margin-left: auto;
+}
+.sync-badge:not(.hidden) ~ .settings-btn { margin-left: 0; }
+
+/* 설정: 아이 정보 고치기 */
+.edit-grid { display: grid; grid-template-columns: 64px 1fr 110px 48px; gap: 8px; align-items: center; margin-bottom: 8px; }
+.edit-grid input[type=color] { padding: 2px; height: 44px; }
+.edit-grid .emo { text-align: center; font-size: 22px; padding: 6px; }
 
 /* 휴대폰 화면 */
 @media (max-width: 480px) {
@@ -109,6 +119,7 @@ label.f { display: block; margin: 14px 0 6px; font-weight: bold; font-size: 14px
   .kid { flex: 1; justify-content: center; padding: 6px 4px; font-size: 15px; gap: 4px; min-width: 0; }
   .kid small { display: none; }
   .tabs button { font-size: 15px; }
+  .edit-grid { grid-template-columns: 56px 1fr 92px 44px; gap: 6px; }
 }
 
 .empty { text-align: center; color: var(--muted); padding: 24px 0; }

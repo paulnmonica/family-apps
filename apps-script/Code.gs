@@ -120,9 +120,8 @@ function putItems(items) {
 function buildViews() {
   const items = {};
   readRows().forEach(r => { try { items[r.key] = JSON.parse(r.json); } catch (e) {} });
-  const kids = items['family.kids'] || [
-    { id: 'k1', name: '첫째' }, { id: 'k2', name: '둘째' }, { id: 'k3', name: '셋째' },
-  ];
+  const kids = (items['family.kids'] || [{ id: 'k2', name: '둘째' }, { id: 'k3', name: '셋째' }])
+    .filter(k => k.id !== 'k1'); // 큰아이는 앱을 쓰지 않음
   const today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
   const ym = today.slice(0, 7);
   const TYPE = { in: '받은 돈', out: '쓴 돈', save: '저금', unsave: '저금통에서 꺼냄' };

@@ -1,7 +1,8 @@
 {
-  "name": "우리 아이들 앱",
-  "short_name": "우리앱",
-  "description": "용돈기입장과 필사 달력",
+  "id": "./",
+  "name": "용돈기입장",
+  "short_name": "용돈기입장",
+  "description": "받은 돈, 쓴 돈을 적고 갖고 싶은 것을 위해 저금해요",
   "lang": "ko",
   "start_url": "./index.html",
   "scope": "./",
@@ -13,9 +14,5 @@
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
-  ],
-  "shortcuts": [
-    { "name": "용돈기입장", "url": "./allowance/index.html", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "필사 달력", "url": "./pilsa/index.html", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
   ]
 }
