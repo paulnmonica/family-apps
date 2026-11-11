@@ -69,6 +69,16 @@
   .parent-stamp { border: 2px dashed #f59e0b; color: #b45309; background: #fffbeb; }
   .parent-stamp.on { border-style: solid; background: #fde68a; }
 
+  .srcs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+  .srcs button { border: 2px solid var(--line); background: #fff; border-radius: 14px; padding: 10px 4px; font-family: 'Jua', sans-serif; font-size: 16px; cursor: pointer; color: var(--muted); }
+  .srcs button.on { border-color: var(--accent); background: var(--accent); color: #fff; }
+  .book-title { font-family: 'Jua', sans-serif; font-size: 21px; word-break: keep-all; }
+  .book-where { margin-top: 4px; font-size: 15px; color: #6b5e57; }
+  .book-form { margin-bottom: 12px; }
+  .book-form label.f:first-child { margin-top: 0; }
+  .book-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .book-nums input { text-align: center; }
+
   .custom-item { display: flex; gap: 8px; align-items: flex-start; padding: 8px 0; border-bottom: 1px dashed var(--line); }
   .custom-item .grow { word-break: keep-all; }
   summary { cursor: pointer; font-family: 'Jua', sans-serif; font-size: 18px; }
@@ -123,10 +133,13 @@
 const F = Family, $ = s => document.querySelector(s), esc = F.esc;
 const STICKERS = ['⭐', '🌈', '🍀', '🌸', '🐶', '🦄', '🚀', '🍓', '🎈', '💎', '🌻', '🐳'];
 const MODES = { paper: '📓 공책에', trace: '🖊️ 화면에', type: '⌨️ 타자로' };
-const MODE_DONE = { paper: '공책에 써서', trace: '화면에 따라 써서', type: '타자로 써서' };
+const MODE_DONE = { paper: '공책에 써서', trace: '화면에 따라 써서', type: '타자로 써서', book: '읽은 책을 따라 써서' };
+// 무엇을 따라 쓸지: 매일 나오는 견본 문장, 또는 아이가 읽은 책
+const SOURCES = { sample: '✨ 오늘의 문장', book: '📖 내가 읽은 책' };
 const WD = ['일', '월', '화', '수', '목', '금', '토'];
 
 let kid, data, viewY, viewM, selDate, mode = 'paper', pending = null;
+let src = 'sample', bookDraft = null; // bookDraft: 책 입력 칸에 쓰던 내용 (다른 화면에 다녀와도 남아 있게)
 const today = () => F.ymd();
 
 function load() {
@@ -135,6 +148,7 @@ function load() {
   data.days = data.days || {};
   data.custom = data.custom || [];
   mode = data.lastMode || 'paper';
+  src = data.lastSrc || 'sample';
   document.documentElement.style.setProperty('--kc', kid.color);
 }
 function save() { F.setData('pilsa.' + kid.id, data); }
@@ -151,6 +165,30 @@ function sentenceFor(ds) {
   return p[((dayNo(ds) % p.length) + p.length) % p.length];
 }
 function isDone(ds) { return !!(data.days[ds] && data.days[ds].done); }
+
+// ---------- 내가 읽은 책 ----------
+function bookWhere(b) {
+  return `${b.page}쪽 · ${b.from === b.to ? `${b.from}째 줄` : `${b.from}째 줄부터 ${b.to}째 줄까지`}`;
+}
+// 전에 쓴 책 이름 (최근 것부터) — 책 이름 칸에서 골라 쓸 수 있게
+function recentBooks() {
+  const seen = new Set();
+  Object.keys(data.days).sort().reverse().forEach(d => {
+    const r = data.days[d];
+    if (r.mode === 'book' && r.book && r.book.title) seen.add(r.book.title);
+  });
+  return [...seen].slice(0, 15);
+}
+function readBookForm() {
+  const toInt = id => parseInt($(id).value, 10) || 0;
+  const title = $('#bTitle').value.trim().replace(/\s+/g, ' ');
+  const page = toInt('#bPage'), from = toInt('#bFrom'), to = toInt('#bTo') || from;
+  if (!title) return F.toast('책 이름을 적어 주세요 📖');
+  if (page < 1) return F.toast('몇 쪽인지 적어 주세요');
+  if (from < 1) return F.toast('몇째 줄부터인지 적어 주세요');
+  if (to < from) return F.toast('끝 줄이 시작 줄보다 앞에 있어요');
+  return { title, page, from, to };
+}
 
 function streak() {
   const d = new Date();
@@ -196,11 +234,24 @@ function dateTitle(ds) {
   return `${d.getMonth() + 1}월 ${d.getDate()}일 (${WD[d.getDay()]})`;
 }
 
+function bookBox(b, text) {
+  return `<div class="sentence-box">
+      <div class="book-title">📖 ${esc(b.title)}</div>
+      <div class="book-where">${esc(bookWhere(b))}</div>
+      ${text ? `<div class="sentence" style="margin-top:10px">${esc(text)}</div>` : ''}
+    </div>`;
+}
+
 function renderDay() {
   const ds = selDate, r = data.days[ds], s = sentenceFor(ds), t = today();
-  const isToday = ds === t, future = ds > t;
+  const isToday = ds === t, future = ds > t, done = isDone(ds);
+  const writing = !future && !done && !pending;
   let head = `<div class="day-title"><h2 style="margin:0">${dateTitle(ds)}${isToday ? ' · 오늘' : ''}</h2>
-    ${!isDone(ds) && !future ? '<button class="btn small" id="shuffle" title="다른 문장으로 바꾸기">🔄 다른 문장</button>' : ''}</div>
+    ${writing && src === 'sample' ? '<button class="btn small" id="shuffle" title="다른 문장으로 바꾸기">🔄 다른 문장</button>' : ''}</div>`;
+  if (writing) head += `<div class="srcs" id="srcs">${Object.entries(SOURCES).map(([k, v]) => `<button data-src="${k}" class="${k === src ? 'on' : ''}">${v}</button>`).join('')}</div>`;
+  if (done && r.mode === 'book') head += bookBox(r.book, r.sentence && r.sentence.t);
+  else if (pending && pending.mode === 'book') head += bookBox(pending.book, pending.text);
+  else if (!(writing && src === 'book')) head += `
     <div class="sentence-box">
       <div class="sentence">${esc(s.t)}</div>
       ${s.m ? `<div class="meaning">💡 ${esc(s.m)}</div>` : ''}
@@ -209,7 +260,23 @@ function renderDay() {
   let body = '';
   if (future) {
     body = `<p class="center muted">아직 오지 않은 날이에요. 미리 읽어 봐도 좋아요 😊</p>`;
-  } else if (isDone(ds)) {
+  } else if (writing && src === 'book') {
+    const b = bookDraft || (bookDraft = { title: data.lastBook || '', page: '', from: '', to: '', text: '' });
+    body = `<div class="book-form">
+        <label class="f" for="bTitle">책 이름</label>
+        <input id="bTitle" list="bookList" maxlength="40" placeholder="예) 마당을 나온 암탉" value="${esc(b.title)}">
+        <datalist id="bookList">${recentBooks().map(n => `<option value="${esc(n)}">`).join('')}</datalist>
+        <div class="book-nums">
+          <div><label class="f" for="bPage">페이지</label><input id="bPage" type="number" inputmode="numeric" min="1" placeholder="쪽" value="${esc(b.page)}"></div>
+          <div><label class="f" for="bFrom">몇째 줄부터</label><input id="bFrom" type="number" inputmode="numeric" min="1" placeholder="줄" value="${esc(b.from)}"></div>
+          <div><label class="f" for="bTo">몇째 줄까지</label><input id="bTo" type="number" inputmode="numeric" min="1" placeholder="줄" value="${esc(b.to)}"></div>
+        </div>
+        <label class="f" for="bText">따라 쓴 문장 (안 써도 돼요)</label>
+        <textarea id="bText" rows="2" maxlength="300" placeholder="마음에 든 문장을 적어 두면 나중에 다시 볼 수 있어요">${esc(b.text)}</textarea>
+      </div>
+      <p class="center">📓 책을 펴고 고른 줄을 공책에 <b>또박또박</b> 따라 써 보세요.</p>
+      <button class="btn primary big finish">다 썼어요! ✨</button>`;
+  } else if (done) {
     body = `<div class="done-view">
       <div class="big">${esc(r.sticker || '⭐')}</div>
       <h3>${MODE_DONE[r.mode] || ''} 필사 완료!</h3>
@@ -243,7 +310,7 @@ function renderDay() {
     }
   }
   $('#day').innerHTML = head + body;
-  if (!future && !isDone(ds) && !pending) {
+  if (writing && src === 'sample') {
     if (mode === 'trace') setupTrace(s.t);
     if (mode === 'type') updateTyping();
   }
@@ -342,6 +409,8 @@ $('#day').addEventListener('click', e => {
   const t = e.target;
   const m = t.closest('[data-m]');
   if (m) { mode = m.dataset.m; data.lastMode = mode; save(); renderDay(); return; }
+  const sb = t.closest('[data-src]');
+  if (sb) { src = sb.dataset.src; data.lastSrc = src; save(); renderDay(); return; }
   if (t.closest('#clearInk') && tr) { drawGuide(); tr.ink = 0; $('.finish').disabled = true; return; }
   if (t.closest('#shuffle')) {
     const p = pool(), cur = sentenceFor(selDate).t;
@@ -351,17 +420,28 @@ $('#day').addEventListener('click', e => {
     save(); renderDay(); return;
   }
   if (t.closest('.finish')) {
-    pending = { mode, typed: mode === 'type' ? $('#typed').value.trim() : '' };
+    if (src === 'book') {
+      const book = readBookForm(); if (!book) return;
+      pending = { mode: 'book', book, text: $('#bText').value.trim() };
+    } else {
+      pending = { mode, typed: mode === 'type' ? $('#typed').value.trim() : '' };
+    }
     renderDay(); return;
   }
   const st = t.closest('[data-s]');
   if (st) { document.querySelectorAll('#stickers button').forEach(b => b.classList.toggle('on', b === st)); return; }
   if (t.closest('#saveDone')) {
     const sticker = (document.querySelector('#stickers .on') || {}).dataset?.s || '⭐';
-    data.days[selDate] = {
-      done: true, mode: pending.mode, typed: pending.typed, sticker,
-      note: $('#note').value.trim(), sentence: sentenceFor(selDate), at: Date.now(), parent: false,
-    };
+    const rec = { done: true, mode: pending.mode, sticker, note: $('#note').value.trim(), at: Date.now(), parent: false };
+    if (pending.mode === 'book') {
+      // 책 필사도 sentence 모양으로 남겨 두면 구글 시트 표(문장/출처)에 그대로 보여요
+      Object.assign(rec, { book: pending.book, sentence: { t: pending.text, m: '', s: pending.book.title + ' ' + bookWhere(pending.book) } });
+      data.lastBook = pending.book.title;
+      bookDraft = null;
+    } else {
+      Object.assign(rec, { typed: pending.typed, sentence: sentenceFor(selDate) });
+    }
+    data.days[selDate] = rec;
     pending = null; save();
     F.celebrate([sticker, '✨', '🎉']);
     const s = streak();
@@ -375,10 +455,22 @@ $('#day').addEventListener('click', e => {
   }
   if (t.closest('#redoBtn')) {
     if (!confirm('이 날의 필사 기록을 지우고 다시 쓸까요?')) return;
-    const keep = data.days[selDate].sentence;
-    data.days[selDate] = { done: false, sentence: keep };
+    const r = data.days[selDate];
+    if (r.mode === 'book') {
+      // 책 내용은 입력 칸에 다시 채워 두고, 이 날의 견본 문장은 원래대로
+      bookDraft = { ...r.book, text: (r.sentence && r.sentence.t) || '' };
+      src = 'book';
+      data.days[selDate] = { done: false };
+    } else {
+      data.days[selDate] = { done: false, sentence: r.sentence };
+    }
     save(); renderAll();
   }
+});
+// 책 입력 칸에 쓰는 내용을 기억해 둠
+$('#day').addEventListener('input', e => {
+  if (!e.target.closest('.book-form')) return;
+  bookDraft = { title: $('#bTitle').value, page: $('#bPage').value, from: $('#bFrom').value, to: $('#bTo').value, text: $('#bText').value };
 });
 $('#day').addEventListener('input', e => { if (e.target.id === 'typed') updateTyping(); });
 
@@ -411,7 +503,7 @@ window.addEventListener('resize', () => {
 
 // ---------- 시작 ----------
 function resetView() {
-  const n = new Date(); viewY = n.getFullYear(); viewM = n.getMonth(); selDate = today(); pending = null;
+  const n = new Date(); viewY = n.getFullYear(); viewM = n.getMonth(); selDate = today(); pending = null; bookDraft = null;
 }
 function onKid() { load(); resetView(); renderAll(); F.sync.pull(['pilsa.' + kid.id]); }
 load(); resetView();
@@ -433,7 +525,8 @@ window.addEventListener('familysync', e => {
   if (!e.detail.keys.some(k => k === 'family.kids' || k === 'pilsa.' + kid.id)) return;
   load(); F.renderPicker($('#kids'), onKid);
   renderStats(); renderCal(); renderCustom();
-  const busy = pending || (tr && tr.ink > 0 && $('#trace')) || (document.activeElement && document.activeElement.id === 'typed');
+  const ae = document.activeElement;
+  const busy = pending || (tr && tr.ink > 0 && $('#trace')) || (ae && (ae.id === 'typed' || ae.closest('.book-form')));
   if (!busy) renderDay();
 });
 F.sync.pull(['family.kids', 'pilsa.' + kid.id]);

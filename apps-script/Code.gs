@@ -125,7 +125,7 @@ function buildViews() {
   const today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
   const ym = today.slice(0, 7);
   const TYPE = { in: '받은 돈', out: '쓴 돈', save: '저금', unsave: '저금통에서 꺼냄' };
-  const MODE = { paper: '공책', trace: '화면', type: '타자' };
+  const MODE = { paper: '공책', trace: '화면', type: '타자', book: '읽은 책' };
   const signOf = t => (t.type === 'in' || t.type === 'unsave') ? 1 : -1;
 
   const summary = [['아이', '지갑', '저금통', '이번 달 받은 돈', '이번 달 쓴 돈', '필사 연속(일)', '이번 달 필사(일)', '전체 필사(일)', '마지막 갱신']];

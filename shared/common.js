@@ -91,6 +91,8 @@
 
     renderPicker(el, onChange) {
       const cur = F.currentId();
+      // 아이 기기로 설정하면 고를 아이가 한 명뿐이라 줄 자체를 숨김 (부모님 기기에서는 두 아이 모두 보임)
+      el.classList.toggle('hidden', F.visibleKids().length < 2);
       el.innerHTML = F.visibleKids().map(k => `
         <button class="kid ${k.id === cur ? 'on' : ''}" style="--kc:${F.esc(k.color)}" data-id="${F.esc(k.id)}">
           <span class="kid-emoji">${F.esc(k.emoji)}</span>
