@@ -166,7 +166,7 @@ function loadWords() {
 }
 const wordSrc = w => `${w.s ? w.s + ' · ' : ''}${w.by.name}의 제안`;
 // 내가 낸 문장이거나 부모님 기기(또는 연결 안 한 기기)면 뺄 수 있음
-const canRemove = w => w.by.id === kid.id || !F.sync.role() || F.sync.role() === 'parent';
+const canRemove = w => w.by.id === kid.id || !F.sync.role() || F.sync.isAdmin();
 
 function pool() {
   const lv = F.level(kid.birthYear);

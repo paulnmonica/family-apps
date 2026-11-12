@@ -65,10 +65,10 @@
     },
     isParent(id) { return /^p\d$/.test(id); },
     wordsKey,
-    // 이 기기가 아이 기기로 설정되어 있으면 그 아이만 보여 줌
+    // 아이 기기로 설정되어 있으면 그 아이만, 아빠·엄마(관리자) 기기면 모두 보여 줌
     visibleKids() {
       const ks = F.kids(), role = F.sync.role();
-      const mine = ks.filter(k => k.id === role);
+      const mine = F.sync.isAdmin() ? [] : ks.filter(k => k.id === role);
       return mine.length ? mine : ks;
     },
     currentId() {
@@ -188,7 +188,7 @@
   const SYNC_URL = 'https://script.google.com/macros/s/AKfycbwJNkE10zEZeYAum1pkeL7V18fdyprUci4hQ3CzGQNfHBnz5iZX2wwrSolNTdNzJZe06Q/exec';
 
   const S_CODE = 'sync.code';   // 가족 확인 코드 (이 기기에만 보관, 백업 파일에도 안 들어감)
-  const S_ROLE = 'sync.role';   // 이 기기를 쓰는 사람: 'parent' 또는 아이 id
+  const S_ROLE = 'sync.role';   // 이 기기를 쓰는 사람의 id (아빠·엄마는 관리자). 예전 'parent'도 관리자
   const S_META = 'sync.meta';   // 항목별 { t: 마지막 수정 시각, dirty: 아직 못 보냄 }
   const S_LAST = 'sync.last';
   const syncable = k => k === KIDS_KEY || k.startsWith('allowance.') || k.startsWith('pilsa.');
@@ -205,6 +205,7 @@
     configured() { return !!SYNC_URL; },
     code() { return safeGet(S_CODE) || ''; },
     role() { return safeGet(S_ROLE) || ''; },
+    isAdmin(r) { r = r === undefined ? S.role() : r; return r === 'parent' || F.isParent(r); },
     enabled() { return !!(SYNC_URL && S.code() && S.role()); },
     lastError: '',
     lastSync() { return Number(safeGet(S_LAST)) || 0; },
@@ -213,7 +214,7 @@
     // 개인 기기는 자기 기록(과 자기가 제안한 가족 문장)만, 부모 기기는 가족 정보와 모두의 기록을 올릴 수 있음 (이 앱의 기록만)
     canWrite(key) {
       const r = S.role();
-      if (r === 'parent') return key === KIDS_KEY || key.startsWith(APP + '.');
+      if (S.isAdmin(r)) return key === KIDS_KEY || key.startsWith(APP + '.');
       if (!r) return false;
       return S.ownKeys(r).includes(key);
     },
@@ -222,7 +223,7 @@
     sharedKeys() { return APP === 'pilsa' ? F.kids().map(k => wordsKey(k.id)) : []; },
     myKeys() {
       const r = S.role();
-      if (r === 'parent') return [KIDS_KEY, ...F.kids().map(k => APP + '.' + k.id), ...S.sharedKeys()];
+      if (S.isAdmin(r)) return [KIDS_KEY, ...F.kids().map(k => APP + '.' + k.id), ...S.sharedKeys()];
       return r ? [...new Set([KIDS_KEY, APP + '.' + r, ...S.sharedKeys()])] : [];
     },
 
@@ -315,7 +316,7 @@
         if (prevRole) quietSet(S_ROLE, prevRole); else quietDel(S_ROLE);
         throw e;
       }
-      if (role !== 'parent') {
+      if (!S.isAdmin(role)) {
         const mine = S.ownKeys(role);
         const server = (await S.call('get', { keys: mine })).items || [];
         const local = mine.filter(k => safeGet(k) != null);
@@ -332,7 +333,8 @@
         S.myKeys().forEach(k => { if (m[k]) m[k].dirty = false; });
         writeMeta(m);
       }
-      F.setCurrent(role === 'parent' ? (F.kids()[0] || {}).id : role);
+      // 아빠·엄마 기기는 처음에 자기 자신이 골라져 있게 (용돈기입장처럼 본인이 없는 앱은 첫 아이)
+      F.setCurrent(F.kids().some(k => k.id === role) ? role : (F.kids()[0] || {}).id);
       await S.pull();
       await S.flush();
     },
@@ -389,7 +391,8 @@
         return;
       }
       const role = S.role();
-      const who = role === 'parent' ? '👨‍👩‍👧 부모님' : (F.kids().find(k => k.id === role) || {}).name;
+      const me = F.allMembers().find(k => k.id === role);
+      const who = role === 'parent' ? '👨‍👩‍👧 부모님' : me ? me.name + (S.isAdmin(role) ? ' (관리자)' : '') : '';
       if (S.enabled()) {
         const last = S.lastSync() ? new Date(S.lastSync()).toLocaleString('ko-KR') : '아직 없음';
         box.innerHTML = `
@@ -402,14 +405,14 @@
         return;
       }
       box.innerHTML = `
-        <p class="muted" style="margin-top:0">기기마다 처음 한 번만 설정하면 돼요. ${family
-          ? '한 사람의 기기로 고르면 그 사람의 기록만 보이고, 부모님 기기로 고르면 온 가족의 기록을 보고 확인 도장을 찍을 수 있어요.'
-          : '아이 기기는 그 아이의 기록만 보이고, 부모님 기기에서는 두 아이의 기록을 모두 볼 수 있어요.'}</p>
+        <p class="muted" style="margin-top:0">기기마다 처음 한 번만 설정하면 돼요. 아이 기기는 그 아이의 기록만 보이고,
+          <b>아빠·엄마 기기는 자동으로 관리자</b>가 되어 ${family ? '온 가족' : '두 아이'}의 기록을 보고 확인 도장을 찍을 수 있어요.
+          ${family ? '가족 정보(이름·태어난 해)는' : '아이 정보는'} 관리자 기기로 연결한 뒤에 고칠 수 있어요.</p>
         <form data-set="connect" autocomplete="off">
           <label class="f" for="setRole">이 기기는 누가 쓰나요?</label>
           <select id="setRole" data-set="role">
-            ${F.kids().map(k => `<option value="${esc(k.id)}">${esc(k.emoji)} ${esc(k.name)}</option>`).join('')}
-            <option value="parent">👨‍👩‍👧 부모님 기기 (${family ? '가족 모두 보기' : '아이들 모두 보기'})</option>
+            ${F.allMembers().filter(k => F.isParent(k.id) || F.kids().some(x => x.id === k.id))
+              .map(k => `<option value="${esc(k.id)}">${esc(k.emoji)} ${esc(k.name)}${F.isParent(k.id) ? ' (관리자)' : ''}</option>`).join('')}
           </select>
           <label class="f" for="setCode">가족 확인 코드</label>
           <input id="setCode" data-set="code" type="password" autocomplete="off" placeholder="부모님께 물어보세요">
@@ -419,7 +422,8 @@
 
     function renderKids() {
       const role = S.role();
-      $s('kidCard').classList.toggle('hidden', !!role && role !== 'parent');
+      // 시트에 올릴 수 있는 관리자 기기에서만 고칠 수 있음 (연결 전에 고친 내용은 관리자 기기로 연결할 때 시트 값으로 바뀌어서)
+      $s('kidCard').classList.toggle('hidden', S.configured() ? !S.isAdmin(role) : false);
       const thisYear = new Date().getFullYear();
       const years = []; for (let y = thisYear; y >= thisYear - (family ? 80 : 20); y--) years.push(y);
       $s('kids').innerHTML = F.kids().map(k => `
@@ -492,13 +496,16 @@
 
   window.addEventListener('online', () => S.flush());
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') S.flush(); });
-  document.addEventListener('DOMContentLoaded', () => {
-    // 부모님 기기에서는 새로 생긴 식구(아빠·엄마·첫째)까지 담은 가족 목록을 구글 시트에도 저장
-    if (S.role() === 'parent') {
+  document.addEventListener('DOMContentLoaded', async () => {
+    S.render(); S.flush();
+    // 부모님 기기에서는 새로 생긴 식구(아빠·엄마·첫째)와 띠 아이콘까지 담은 가족 목록을 구글 시트에도 저장.
+    // 시트의 최신 가족 정보(태어난 해 등)를 먼저 받아 온 뒤에 해야 예전 값으로 덮어쓰지 않아요.
+    if (S.isAdmin()) {
+      await S.pull([KIDS_KEY]);
+      if (S.lastError) return;
       const raw = F.getData(KIDS_KEY, null);
       if (!Array.isArray(raw) || ORDER.some(id => !raw.some(k => k.id === id))
         || raw.some(k => k.emoji === OLD_EMOJI[k.id])) F.saveKids(F.allMembers());
     }
-    S.render(); S.flush();
   });
 })();
