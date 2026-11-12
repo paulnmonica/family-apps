@@ -120,19 +120,23 @@ function putItems(items) {
 function buildViews() {
   const items = {};
   readRows().forEach(r => { try { items[r.key] = JSON.parse(r.json); } catch (e) {} });
-  const kids = (items['family.kids'] || [{ id: 'k2', name: '둘째' }, { id: 'k3', name: '셋째' }])
-    .filter(k => k.id !== 'k1'); // 큰아이는 앱을 쓰지 않음
+  const kids = items['family.kids'] || [{ id: 'p1', name: '아빠' }, { id: 'p2', name: '엄마' },
+    { id: 'k1', name: '첫째' }, { id: 'k2', name: '둘째' }, { id: 'k3', name: '셋째' }];
   const today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
   const ym = today.slice(0, 7);
   const TYPE = { in: '받은 돈', out: '쓴 돈', save: '저금', unsave: '저금통에서 꺼냄' };
   const MODE = { paper: '공책', trace: '화면', type: '타자', book: '읽은 책' };
   const signOf = t => (t.type === 'in' || t.type === 'unsave') ? 1 : -1;
 
-  const summary = [['아이', '지갑', '저금통', '이번 달 받은 돈', '이번 달 쓴 돈', '필사 연속(일)', '이번 달 필사(일)', '전체 필사(일)', '마지막 갱신']];
+  const summary = [['이름', '지갑', '저금통', '이번 달 받은 돈', '이번 달 쓴 돈', '필사 연속(일)', '이번 달 필사(일)', '전체 필사(일)', '마지막 갱신']];
   const money = [['아이', '날짜', '구분', '분류', '금액', '메모']];
-  const pilsa = [['아이', '날짜', '방법', '스티커', '문장', '출처', '느낀 점', '부모 확인']];
+  const pilsa = [['이름', '날짜', '방법', '스티커', '문장', '출처', '느낀 점', '부모 확인']];
+  const words = [['제안한 사람', '제안한 날', '문장', '출처']];
 
   kids.forEach(k => {
+    (items['pilsa.words-' + k.id] || []).forEach(w => {
+      words.push([k.name, w.at ? Utilities.formatDate(new Date(w.at), TZ, 'yyyy-MM-dd') : '', w.t || '', w.s || '']);
+    });
     const a = items['allowance.' + k.id] || {};
     const tx = (a.tx || []).slice().sort((x, y) => (y.date || '').localeCompare(x.date || '') || (y.ts || 0) - (x.ts || 0));
     let wallet = 0, mi = 0, mo = 0;
@@ -163,6 +167,7 @@ function buildViews() {
   writeView('요약', summary, 0);
   writeView('용돈', money, 1);
   writeView('필사', pilsa, 2);
+  writeView('가족 문장', words, 3);
 }
 
 function prevDay(s) {

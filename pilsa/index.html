@@ -112,14 +112,14 @@
 
   <div class="card">
     <details id="customBox">
-      <summary>📝 우리 가족 문장 넣기 (부모님용)</summary>
-      <p class="muted" style="margin-bottom:0">여기에 넣은 문장은 이 아이의 매일 문장에 함께 섞여 나와요. 좋아하는 책 구절이나 가훈을 넣어 보세요.</p>
+      <summary>💌 우리 가족 문장 제안하기</summary>
+      <p class="muted" style="margin-bottom:0">누구나 좋은 글을 제안할 수 있어요. 제안한 문장은 <b>온 가족</b>의 매일 문장에 함께 섞여 나와요. 좋아하는 책 구절이나 가훈, 응원하고 싶은 말을 넣어 보세요.</p>
       <form id="customForm" autocomplete="off">
         <label class="f" for="cText">문장</label>
         <textarea id="cText" rows="2" maxlength="200" placeholder="예) 오늘도 나는 어제보다 조금 더 자랐다."></textarea>
         <label class="f" for="cSrc">출처 (선택)</label>
-        <input id="cSrc" maxlength="40" placeholder="예) 엄마가 좋아하는 문장">
-        <div style="margin-top:12px"><button class="btn primary" type="submit">문장 추가</button></div>
+        <input id="cSrc" maxlength="40" placeholder="예) 어린 왕자">
+        <div style="margin-top:12px"><button class="btn primary" type="submit" id="cBtn">제안하기</button></div>
       </form>
       <div id="customList" style="margin-top:10px"></div>
     </details>
@@ -138,7 +138,7 @@ const MODE_DONE = { paper: '공책에 써서', trace: '화면에 따라 써서',
 const SOURCES = { sample: '✨ 오늘의 문장', book: '📖 내가 읽은 책' };
 const WD = ['일', '월', '화', '수', '목', '금', '토'];
 
-let kid, data, viewY, viewM, selDate, mode = 'paper', pending = null;
+let kid, data, words, viewY, viewM, selDate, mode = 'paper', pending = null;
 let src = 'sample', bookDraft = null; // bookDraft: 책 입력 칸에 쓰던 내용 (다른 화면에 다녀와도 남아 있게)
 const today = () => F.ymd();
 
@@ -146,16 +146,31 @@ function load() {
   kid = F.current();
   data = F.getData('pilsa.' + kid.id, null) || {};
   data.days = data.days || {};
-  data.custom = data.custom || [];
   mode = data.lastMode || 'paper';
   src = data.lastSrc || 'sample';
+  // 예전에 부모님이 이 사람 칸에만 넣어 둔 문장은 가족 문장으로 옮김
+  if (data.custom && data.custom.length) {
+    const mine = F.getData(F.wordsKey(kid.id), []);
+    F.setData(F.wordsKey(kid.id), [...mine, ...data.custom.map(c => ({ ...c, at: Date.now() }))]);
+  }
+  if (data.custom) { delete data.custom; save(); }
+  loadWords();
   document.documentElement.style.setProperty('--kc', kid.color);
 }
 function save() { F.setData('pilsa.' + kid.id, data); }
 
+// 가족 모두가 제안한 문장 (사람마다 따로 저장되어 있는 것을 모아서)
+function loadWords() {
+  words = F.kids().flatMap(p => F.getData(F.wordsKey(p.id), []).map(w => ({ ...w, by: p })))
+    .sort((a, b) => (a.at || 0) - (b.at || 0));
+}
+const wordSrc = w => `${w.s ? w.s + ' · ' : ''}${w.by.name}의 제안`;
+// 내가 낸 문장이거나 부모님 기기(또는 연결 안 한 기기)면 뺄 수 있음
+const canRemove = w => w.by.id === kid.id || !F.sync.role() || F.sync.role() === 'parent';
+
 function pool() {
   const lv = F.level(kid.birthYear);
-  return [...SENTENCES[lv], ...data.custom.map(c => ({ t: c.t, m: '', s: c.s || '우리 가족 문장' }))];
+  return [...SENTENCES[lv], ...words.map(w => ({ t: w.t, m: '', s: wordSrc(w) }))];
 }
 function dayNo(ds) { const [y, m, d] = ds.split('-').map(Number); return Math.floor(Date.UTC(y, m - 1, d) / 86400000); }
 function sentenceFor(ds) {
@@ -209,7 +224,7 @@ function renderStats() {
     <div><b>📅 ${month}</b><span>${viewM + 1}월에 쓴 날</span></div>
     <div><b>🏆 ${total}</b><span>지금까지 쓴 날</span></div>`;
   const lv = F.level(kid.birthYear);
-  $('#level').textContent = `${kid.emoji} ${kid.name} (${F.gradeLabel(kid.birthYear)}) · 오늘의 문장: ${LEVEL_NAME[lv]}${data.custom.length ? ' + 우리 가족 문장' : ''}`;
+  $('#level').textContent = `${kid.emoji} ${kid.name} (${F.gradeLabel(kid.birthYear)}) · 오늘의 문장: ${LEVEL_NAME[lv]}${words.length ? ' + 우리 가족 문장' : ''}`;
 }
 
 function renderCal() {
@@ -283,7 +298,7 @@ function renderDay() {
       ${r.note ? `<div class="note">💬 ${esc(r.note)}</div>` : ''}
       ${r.typed ? `<div class="note" style="font-family:'Gowun Batang',serif">⌨️ ${esc(r.typed)}</div>` : ''}
       <div class="row" style="justify-content:center;margin-top:12px;flex-wrap:wrap">
-        <button class="btn parent-stamp ${r.parent ? 'on' : ''}" id="parentBtn">${r.parent ? '👍 부모님이 확인했어요' : '👍 부모님 확인 도장'}</button>
+        ${F.isParent(kid.id) ? '' : `<button class="btn parent-stamp ${r.parent ? 'on' : ''}" id="parentBtn">${r.parent ? '👍 부모님이 확인했어요' : '👍 부모님 확인 도장'}</button>`}
         <button class="btn" id="redoBtn">다시 쓰기</button>
       </div></div>`;
   } else if (pending) {
@@ -478,20 +493,24 @@ $('#customForm').onsubmit = e => {
   e.preventDefault();
   const t = $('#cText').value.trim().replace(/\s+/g, ' ');
   if (!t) return F.toast('문장을 적어 주세요');
-  data.custom.push({ id: F.uid(), t, s: $('#cSrc').value.trim() });
-  save(); $('#cText').value = ''; $('#cSrc').value = '';
-  F.toast('📝 문장을 추가했어요'); renderAll();
+  const key = F.wordsKey(kid.id);
+  F.setData(key, [...F.getData(key, []), { id: F.uid(), t, s: $('#cSrc').value.trim(), at: Date.now() }]);
+  $('#cText').value = ''; $('#cSrc').value = '';
+  loadWords(); F.toast('💌 가족 모두에게 문장을 제안했어요'); renderAll();
 };
 $('#customList').onclick = e => {
   const b = e.target.closest('[data-cdel]'); if (!b) return;
+  const w = words.find(x => x.id === b.dataset.cdel); if (!w) return;
   if (!confirm('이 문장을 뺄까요?')) return;
-  data.custom = data.custom.filter(c => c.id !== b.dataset.cdel);
-  save(); renderAll();
+  const key = F.wordsKey(w.by.id);
+  F.setData(key, F.getData(key, []).filter(x => x.id !== w.id));
+  loadWords(); renderAll();
 };
 function renderCustom() {
-  $('#customList').innerHTML = data.custom.length
-    ? data.custom.map(c => `<div class="custom-item"><div class="grow">${esc(c.t)}<div class="muted" style="font-size:13px">${esc(c.s || '우리 가족 문장')}</div></div><button class="btn small" data-cdel="${c.id}">빼기</button></div>`).join('')
-    : '<div class="muted" style="font-size:14px">아직 넣은 문장이 없어요.</div>';
+  $('#cBtn').textContent = `${kid.emoji} ${kid.name} 이름으로 제안하기`;
+  $('#customList').innerHTML = words.length
+    ? words.map(w => `<div class="custom-item"><div class="grow">${esc(w.t)}<div class="muted" style="font-size:13px">${esc(w.by.emoji)} ${esc(wordSrc(w))}</div></div>${canRemove(w) ? `<button class="btn small" data-cdel="${esc(w.id)}">빼기</button>` : ''}</div>`).join('')
+    : '<div class="muted" style="font-size:14px">아직 제안된 문장이 없어요. 첫 번째로 제안해 보세요!</div>';
 }
 
 let lastW = window.innerWidth;
@@ -505,7 +524,7 @@ window.addEventListener('resize', () => {
 function resetView() {
   const n = new Date(); viewY = n.getFullYear(); viewM = n.getMonth(); selDate = today(); pending = null; bookDraft = null;
 }
-function onKid() { load(); resetView(); renderAll(); F.sync.pull(['pilsa.' + kid.id]); }
+function onKid() { load(); resetView(); renderAll(); F.sync.pull(['pilsa.' + kid.id, ...F.sync.sharedKeys()]); }
 load(); resetView();
 F.renderPicker($('#kids'), onKid);
 renderAll();
@@ -522,14 +541,14 @@ $('#setBtn').onclick = () => {
 
 // 구글 시트에 더 최신 기록이 있으면 받아서 다시 그림 (쓰는 중인 화면은 건드리지 않음)
 window.addEventListener('familysync', e => {
-  if (!e.detail.keys.some(k => k === 'family.kids' || k === 'pilsa.' + kid.id)) return;
+  if (!e.detail.keys.some(k => k === 'family.kids' || k === 'pilsa.' + kid.id || k.startsWith('pilsa.words-'))) return;
   load(); F.renderPicker($('#kids'), onKid);
   renderStats(); renderCal(); renderCustom();
   const ae = document.activeElement;
   const busy = pending || (tr && tr.ink > 0 && $('#trace')) || (ae && (ae.id === 'typed' || ae.closest('.book-form')));
   if (!busy) renderDay();
 });
-F.sync.pull(['family.kids', 'pilsa.' + kid.id]);
+F.sync.pull(['family.kids', 'pilsa.' + kid.id, ...F.sync.sharedKeys()]);
 </script>
 </body>
 </html>

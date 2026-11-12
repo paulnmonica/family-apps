@@ -20,12 +20,19 @@
   // 이 앱의 기록 + 두 앱이 함께 쓰는 아이 정보
   const PREFIXES = ['family.', APP + '.'];
 
-  // 초등학생 두 명만 써요. 큰아이(k1)는 쓰지 않아서 목록에서 빼요. (기존 기록이 맞게 이어지도록 id는 그대로)
-  const RETIRED = ['k1'];
+  // 가족 모두의 정보는 family.kids 하나에 저장하고, 앱마다 쓰는 사람만 골라 보여 줘요.
+  // 필사 달력은 온 가족이, 용돈기입장은 초등학생 두 명만 써요. (기존 기록이 맞게 이어지도록 id는 그대로)
   const DEFAULT_KIDS = [
+    { id: 'p1', name: '아빠', birthYear: 1980, emoji: '🐯', color: '#0ea5e9' },
+    { id: 'p2', name: '엄마', birthYear: 1980, emoji: '🦊', color: '#f97316' },
+    { id: 'k1', name: '첫째', birthYear: 2011, emoji: '🦁', color: '#f59e0b' },
     { id: 'k2', name: '둘째', birthYear: 2016, emoji: '🐰', color: '#ec4899' },
     { id: 'k3', name: '셋째', birthYear: 2017, emoji: '🐻', color: '#3b82f6' },
   ];
+  const ORDER = DEFAULT_KIDS.map(k => k.id);
+  const APP_MEMBERS = { allowance: ['k2', 'k3'], pilsa: ORDER };
+  // 필사 달력: 각자 제안한 가족 문장 (가족 모두가 읽고, 제안한 사람만 고칠 수 있음)
+  const wordsKey = id => 'pilsa.words-' + id;
 
   function safeGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function safeSet(k, v) {
@@ -36,15 +43,21 @@
   const APP_NAME = { allowance: '용돈기입장', pilsa: '필사달력' };
 
   const F = window.Family = {
-    kids() {
-      try {
-        const v = JSON.parse(safeGet(KIDS_KEY));
-        const list = Array.isArray(v) ? v.filter(k => !RETIRED.includes(k.id)) : [];
-        if (list.length) return list;
-      } catch (e) {}
-      return DEFAULT_KIDS.map(k => ({ ...k }));
+    // 가족 전체 (저장된 정보 + 아직 저장 안 된 기본 식구)
+    allMembers() {
+      let saved = [];
+      try { const v = JSON.parse(safeGet(KIDS_KEY)); if (Array.isArray(v)) saved = v; } catch (e) {}
+      return DEFAULT_KIDS.map(d => ({ ...d, ...(saved.find(k => k.id === d.id) || {}) }));
     },
-    saveKids(list) { if (safeSet(KIDS_KEY, JSON.stringify(list))) F.sync.touch(KIDS_KEY); },
+    // 이 앱을 쓰는 사람만
+    kids() { return F.allMembers().filter(k => (APP_MEMBERS[APP] || ORDER).includes(k.id)); },
+    // 이 앱에서 고친 사람만 바꾸고 나머지 식구 정보는 그대로 둠
+    saveKids(list) {
+      const all = F.allMembers().map(k => list.find(n => n.id === k.id) || k);
+      if (safeSet(KIDS_KEY, JSON.stringify(all))) F.sync.touch(KIDS_KEY);
+    },
+    isParent(id) { return /^p\d$/.test(id); },
+    wordsKey,
     // 이 기기가 아이 기기로 설정되어 있으면 그 아이만 보여 줌
     visibleKids() {
       const ks = F.kids(), role = F.sync.role();
@@ -91,7 +104,7 @@
 
     renderPicker(el, onChange) {
       const cur = F.currentId();
-      // 아이 기기로 설정하면 고를 아이가 한 명뿐이라 줄 자체를 숨김 (부모님 기기에서는 두 아이 모두 보임)
+      // 한 사람의 기기로 설정하면 고를 사람이 한 명뿐이라 줄 자체를 숨김 (부모님 기기에서는 모두 보임)
       el.classList.toggle('hidden', F.visibleKids().length < 2);
       el.innerHTML = F.visibleKids().map(k => `
         <button class="kid ${k.id === cur ? 'on' : ''}" style="--kc:${F.esc(k.color)}" data-id="${F.esc(k.id)}">
@@ -190,17 +203,20 @@
     lastSync() { return Number(safeGet(S_LAST)) || 0; },
     pendingCount() { const m = readMeta(); return Object.keys(m).filter(k => m[k].dirty && S.canWrite(k)).length; },
 
-    // 아이 기기는 자기 기록만, 부모 기기는 아이 정보와 모든 아이의 기록을 올릴 수 있음 (이 앱의 기록만)
+    // 개인 기기는 자기 기록(과 자기가 제안한 가족 문장)만, 부모 기기는 가족 정보와 모두의 기록을 올릴 수 있음 (이 앱의 기록만)
     canWrite(key) {
       const r = S.role();
       if (r === 'parent') return key === KIDS_KEY || key.startsWith(APP + '.');
       if (!r) return false;
-      return key === APP + '.' + r;
+      return S.ownKeys(r).includes(key);
     },
+    ownKeys(id) { return APP === 'pilsa' ? [APP + '.' + id, wordsKey(id)] : [APP + '.' + id]; },
+    // 가족 문장은 누구나 읽음
+    sharedKeys() { return APP === 'pilsa' ? F.kids().map(k => wordsKey(k.id)) : []; },
     myKeys() {
       const r = S.role();
-      if (r === 'parent') return [KIDS_KEY, ...F.kids().map(k => APP + '.' + k.id)];
-      return r ? [KIDS_KEY, APP + '.' + r] : [];
+      if (r === 'parent') return [KIDS_KEY, ...F.kids().map(k => APP + '.' + k.id), ...S.sharedKeys()];
+      return r ? [...new Set([KIDS_KEY, APP + '.' + r, ...S.sharedKeys()])] : [];
     },
 
     touch(key) {
@@ -293,12 +309,12 @@
         throw e;
       }
       if (role !== 'parent') {
-        const mine = [APP + '.' + role];
+        const mine = S.ownKeys(role);
         const server = (await S.call('get', { keys: mine })).items || [];
         const local = mine.filter(k => safeGet(k) != null);
         let useServer = server.length > 0;
         if (server.length && local.length) {
-          useServer = confirm('구글 시트에 이미 이 아이의 기록이 있어요.\n\n[확인] 시트 기록을 이 기기로 가져오기\n[취소] 이 기기 기록으로 시트를 덮어쓰기');
+          useServer = confirm('구글 시트에 이미 이 사람의 기록이 있어요.\n\n[확인] 시트 기록을 이 기기로 가져오기\n[취소] 이 기기 기록으로 시트를 덮어쓰기');
         }
         const m = readMeta();
         if (useServer) mine.forEach(k => { m[k] = { t: 0, dirty: false }; });
@@ -333,14 +349,15 @@
   // 두 앱이 똑같이 씀. 아이 기기나 연결이 바뀌면 onChange()로 앱 화면을 다시 그리게 해요.
   F.mountSettings = (el, onChange) => {
     const esc = F.esc;
+    const family = APP === 'pilsa'; // 필사 달력은 온 가족, 용돈기입장은 아이들
     el.innerHTML = `
       <div class="card">
         <h2>📱 이 기기 설정 (구글 시트 연결)</h2>
         <div data-set="device"></div>
       </div>
       <div class="card" data-set="kidCard">
-        <h2>👧👦 아이 정보 (부모님용)</h2>
-        <p class="muted" style="margin-top:0">이름, 동물 아이콘, 태어난 해, 색깔을 바꿀 수 있어요.${APP === 'pilsa' ? ' 태어난 해에 맞춰 필사 문장 난이도가 정해져요.' : ''}</p>
+        <h2>${family ? '👨‍👩‍👧‍👦 가족 정보' : '👧👦 아이 정보'} (부모님용)</h2>
+        <p class="muted" style="margin-top:0">이름, 동물 아이콘, 태어난 해, 색깔을 바꿀 수 있어요.${family ? ' 태어난 해에 맞춰 필사 문장 난이도가 정해져요.' : ''}</p>
         <form data-set="kidForm">
           <div data-set="kids"></div>
           <button class="btn primary" type="submit" style="margin-top:6px">저장</button>
@@ -378,12 +395,14 @@
         return;
       }
       box.innerHTML = `
-        <p class="muted" style="margin-top:0">기기마다 처음 한 번만 설정하면 돼요. 아이 기기는 그 아이의 기록만 보이고, 부모님 기기에서는 두 아이의 기록을 모두 볼 수 있어요.</p>
+        <p class="muted" style="margin-top:0">기기마다 처음 한 번만 설정하면 돼요. ${family
+          ? '한 사람의 기기로 고르면 그 사람의 기록만 보이고, 부모님 기기로 고르면 온 가족의 기록을 보고 확인 도장을 찍을 수 있어요.'
+          : '아이 기기는 그 아이의 기록만 보이고, 부모님 기기에서는 두 아이의 기록을 모두 볼 수 있어요.'}</p>
         <form data-set="connect" autocomplete="off">
           <label class="f" for="setRole">이 기기는 누가 쓰나요?</label>
           <select id="setRole" data-set="role">
             ${F.kids().map(k => `<option value="${esc(k.id)}">${esc(k.emoji)} ${esc(k.name)}</option>`).join('')}
-            <option value="parent">👨‍👩‍👧 부모님</option>
+            <option value="parent">👨‍👩‍👧 부모님 기기 (${family ? '가족 모두 보기' : '아이들 모두 보기'})</option>
           </select>
           <label class="f" for="setCode">가족 확인 코드</label>
           <input id="setCode" data-set="code" type="password" autocomplete="off" placeholder="부모님께 물어보세요">
@@ -395,7 +414,7 @@
       const role = S.role();
       $s('kidCard').classList.toggle('hidden', !!role && role !== 'parent');
       const thisYear = new Date().getFullYear();
-      const years = []; for (let y = thisYear; y >= thisYear - 20; y--) years.push(y);
+      const years = []; for (let y = thisYear; y >= thisYear - (family ? 80 : 20); y--) years.push(y);
       $s('kids').innerHTML = F.kids().map(k => `
         <div class="edit-grid" data-id="${esc(k.id)}">
           <input class="emo" maxlength="4" value="${esc(k.emoji)}" aria-label="아이콘">
@@ -467,10 +486,10 @@
   window.addEventListener('online', () => S.flush());
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') S.flush(); });
   document.addEventListener('DOMContentLoaded', () => {
-    // 부모님 기기에서는 큰아이를 뺀 아이 목록을 구글 시트에도 저장
+    // 부모님 기기에서는 새로 생긴 식구(아빠·엄마·첫째)까지 담은 가족 목록을 구글 시트에도 저장
     if (S.role() === 'parent') {
       const raw = F.getData(KIDS_KEY, null);
-      if (Array.isArray(raw) && raw.some(k => RETIRED.includes(k.id))) F.saveKids(F.kids());
+      if (!Array.isArray(raw) || ORDER.some(id => !raw.some(k => k.id === id))) F.saveKids(F.allMembers());
     }
     S.render(); S.flush();
   });

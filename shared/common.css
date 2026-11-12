@@ -118,6 +118,9 @@ label.f { display: block; margin: 14px 0 6px; font-weight: bold; font-size: 14px
   .kids { flex-wrap: nowrap; gap: 6px; }
   .kid { flex: 1; justify-content: center; padding: 6px 4px; font-size: 15px; gap: 4px; min-width: 0; }
   .kid small { display: none; }
+  .kid > span:last-child { white-space: nowrap; }
+  /* 온 가족(4명 이상)이면 아이콘 아래에 이름 */
+  .kids:has(.kid:nth-child(4)) .kid { flex-direction: column; gap: 2px; border-radius: 16px; padding: 6px 2px; font-size: 14px; }
   .tabs button { font-size: 15px; }
   .edit-grid { grid-template-columns: 56px 1fr 92px 44px; gap: 6px; }
 }
