@@ -22,13 +22,16 @@
 
   // 가족 모두의 정보는 family.kids 하나에 저장하고, 앱마다 쓰는 사람만 골라 보여 줘요.
   // 필사 달력은 온 가족이, 용돈기입장은 초등학생 두 명만 써요. (기존 기록이 맞게 이어지도록 id는 그대로)
+  // 아이콘은 각자의 띠
   const DEFAULT_KIDS = [
-    { id: 'p1', name: '아빠', birthYear: 1980, emoji: '🐯', color: '#0ea5e9' },
-    { id: 'p2', name: '엄마', birthYear: 1980, emoji: '🦊', color: '#f97316' },
-    { id: 'k1', name: '첫째', birthYear: 2011, emoji: '🦁', color: '#f59e0b' },
-    { id: 'k2', name: '둘째', birthYear: 2016, emoji: '🐰', color: '#ec4899' },
-    { id: 'k3', name: '셋째', birthYear: 2017, emoji: '🐻', color: '#3b82f6' },
+    { id: 'p1', name: '아빠', birthYear: 1980, emoji: '🐲', color: '#0ea5e9' },
+    { id: 'p2', name: '엄마', birthYear: 1980, emoji: '🐑', color: '#f97316' },
+    { id: 'k1', name: '첫째', birthYear: 2011, emoji: '🐰', color: '#f59e0b' },
+    { id: 'k2', name: '둘째', birthYear: 2016, emoji: '🐑', color: '#ec4899' },
+    { id: 'k3', name: '셋째', birthYear: 2017, emoji: '🐔', color: '#3b82f6' },
   ];
+  // 예전 기본 아이콘을 그대로 쓰던 사람은 띠 아이콘으로 바꿔 줌 (직접 고른 아이콘은 그대로)
+  const OLD_EMOJI = { p1: '🐯', p2: '🦊', k1: '🦁', k2: '🐰', k3: '🐻' };
   const ORDER = DEFAULT_KIDS.map(k => k.id);
   const APP_MEMBERS = { allowance: ['k2', 'k3'], pilsa: ORDER };
   // 필사 달력: 각자 제안한 가족 문장 (가족 모두가 읽고, 제안한 사람만 고칠 수 있음)
@@ -47,7 +50,11 @@
     allMembers() {
       let saved = [];
       try { const v = JSON.parse(safeGet(KIDS_KEY)); if (Array.isArray(v)) saved = v; } catch (e) {}
-      return DEFAULT_KIDS.map(d => ({ ...d, ...(saved.find(k => k.id === d.id) || {}) }));
+      return DEFAULT_KIDS.map(d => {
+        const k = { ...d, ...(saved.find(s => s.id === d.id) || {}) };
+        if (k.emoji === OLD_EMOJI[d.id]) k.emoji = d.emoji;
+        return k;
+      });
     },
     // 이 앱을 쓰는 사람만
     kids() { return F.allMembers().filter(k => (APP_MEMBERS[APP] || ORDER).includes(k.id)); },
@@ -489,7 +496,8 @@
     // 부모님 기기에서는 새로 생긴 식구(아빠·엄마·첫째)까지 담은 가족 목록을 구글 시트에도 저장
     if (S.role() === 'parent') {
       const raw = F.getData(KIDS_KEY, null);
-      if (!Array.isArray(raw) || ORDER.some(id => !raw.some(k => k.id === id))) F.saveKids(F.allMembers());
+      if (!Array.isArray(raw) || ORDER.some(id => !raw.some(k => k.id === id))
+        || raw.some(k => k.emoji === OLD_EMOJI[k.id])) F.saveKids(F.allMembers());
     }
     S.render(); S.flush();
   });

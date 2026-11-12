@@ -43,7 +43,8 @@ h3 { font-size: 17px; }
   border: 2px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 16px 6px 8px;
   display: flex; align-items: center; gap: 6px; font: inherit; font-size: 16px; cursor: pointer; color: var(--ink);
 }
-.kid.on { border-color: var(--kc); background: color-mix(in srgb, var(--kc) 16%, white); font-weight: bold; }
+/* 고른 사람은 바탕은 흰색 그대로, 테두리를 그 사람 색으로 두껍게 */
+.kid.on { border-color: var(--kc); box-shadow: inset 0 0 0 2px var(--kc); font-weight: bold; }
 .kid-emoji { font-size: 22px; line-height: 1; }
 .kid small { color: var(--muted); font-size: 12px; }
 
