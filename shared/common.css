@@ -113,6 +113,24 @@ label.f { display: block; margin: 14px 0 6px; font-weight: bold; font-size: 14px
 .edit-grid input[type=color] { padding: 2px; height: 44px; }
 .edit-grid .emo { text-align: center; font-size: 22px; padding: 6px; }
 
+/* PC에서 휴대폰 화면 미리 보기 */
+.view-toggle {
+  position: fixed; right: 20px; bottom: 20px; z-index: 50; border: 2px solid var(--line); background: #fff; color: var(--ink);
+  border-radius: 999px; padding: 10px 18px; font: inherit; font-size: 15px; cursor: pointer; box-shadow: 0 4px 14px rgba(0, 0, 0, .12);
+}
+.view-toggle:hover { border-color: var(--accent, #ff8a3d); }
+body.phone-open { overflow: hidden; }
+body.phone-open .view-toggle { display: none; }
+.phone-view {
+  position: fixed; inset: 0; z-index: 100; background: #3f3a37;
+  display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 12px;
+}
+.phone-bar { display: flex; align-items: center; gap: 14px; color: #fff; font-size: 15px; }
+.phone-bar button { border: 0; background: #fff; color: var(--ink); border-radius: 999px; padding: 8px 16px; font: inherit; font-size: 15px; cursor: pointer; }
+html.in-phone { scrollbar-width: none; }
+html.in-phone::-webkit-scrollbar { display: none; }
+.phone-view iframe { width: 410px; height: min(864px, calc(100vh - 76px)); border: 10px solid #111; border-radius: 36px; background: #fff; }
+
 /* 휴대폰 화면 */
 @media (max-width: 480px) {
   .wrap { padding: calc(12px + env(safe-area-inset-top)) 12px calc(60px + env(safe-area-inset-bottom)); }

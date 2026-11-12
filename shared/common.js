@@ -494,9 +494,37 @@
     render();
   };
 
+  // ================= PC에서 휴대폰 화면 미리 보기 =================
+  // PC(마우스, 넓은 화면)에서만 버튼이 생겨요. 같은 앱을 휴대폰 크기 틀 안에 띄워서 기록도 그대로 함께 써요.
+  const VIEW_KEY = 'ui.mobileView'; // 이 PC에서만 기억 (구글 시트로 안 감)
+  function setupViewToggle() {
+    // 휴대폰 틀 안의 화면: 진짜 휴대폰처럼 스크롤 막대가 자리를 차지하지 않게
+    if (window.top !== window) { document.documentElement.classList.add('in-phone'); return; }
+    if (!matchMedia('(pointer: fine)').matches || window.innerWidth < 700) return; // 휴대폰·태블릿
+    const btn = document.createElement('button');
+    btn.className = 'view-toggle';
+    btn.textContent = '📱 모바일로 보기';
+    btn.onclick = () => { quietSet(VIEW_KEY, '1'); openPhone(); };
+    document.body.appendChild(btn);
+
+    function openPhone() {
+      const box = document.createElement('div');
+      box.className = 'phone-view';
+      box.innerHTML = `
+        <div class="phone-bar"><span>📱 휴대폰 화면</span><button type="button">🖥️ 데스크탑으로</button></div>
+        <iframe title="휴대폰 화면" src="${F.esc(location.href)}"></iframe>`;
+      // 휴대폰 틀에서 쓴 기록이 PC 화면에도 보이도록 돌아올 때 새로 읽어 옴
+      box.querySelector('button').onclick = () => { quietDel(VIEW_KEY); location.reload(); };
+      document.body.appendChild(box);
+      document.body.classList.add('phone-open');
+    }
+    if (safeGet(VIEW_KEY)) openPhone();
+  }
+
   window.addEventListener('online', () => S.flush());
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') S.flush(); });
   document.addEventListener('DOMContentLoaded', async () => {
+    setupViewToggle();
     S.render(); S.flush();
     // 부모님 기기에서는 새로 생긴 식구(아빠·엄마·첫째)와 띠 아이콘까지 담은 가족 목록을 구글 시트에도 저장.
     // 시트의 최신 가족 정보(태어난 해 등)를 먼저 받아 온 뒤에 해야 예전 값으로 덮어쓰지 않아요.
