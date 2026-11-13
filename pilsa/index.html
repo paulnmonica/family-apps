@@ -87,6 +87,8 @@
   .more-item .st { font-size: 30px; line-height: 1; }
   .more-item .t { word-break: keep-all; }
   .more-item .sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .more-btns { display: flex; flex-direction: column; gap: 6px; }
+  .edited { font-family: 'Gowun Dodum', sans-serif; font-size: 12px; font-weight: 400; color: var(--muted); white-space: nowrap; }
   .cell .cnt { position: absolute; left: 3px; bottom: 0; font-size: 11px; color: #b45309; font-weight: bold; }
 
   .custom-item { display: flex; gap: 8px; align-items: flex-start; padding: 8px 0; border-bottom: 1px dashed var(--line); }
@@ -151,6 +153,7 @@ const WD = ['일', '월', '화', '수', '목', '금', '토'];
 let kid, data, words, viewY, viewM, selDate, mode = 'paper', pending = null;
 let src = 'sample', bookDraft = null; // bookDraft: 책 입력 칸에 쓰던 내용 (다른 화면에 다녀와도 남아 있게)
 let addMode = false, addSentence = null; // 이미 쓴 날에 '한 번 더 쓰기' 중인지
+let editIdx = null; // ✏️ 고치는 중인 기록 (0: 그날 첫 기록, 1~: 더 쓴 기록)
 const today = () => F.ymd();
 
 function load() {
@@ -303,15 +306,54 @@ function moreList(r) {
         <div class="sub">${e.mode === 'book' ? esc(bookWhere(e.book)) : '— ' + esc(e.sentence.s)} · ${MODE_DONE[e.mode] || ''}</div>
         ${e.mode === 'book' && e.sentence.t ? `<div class="sub">“${esc(e.sentence.t)}”</div>` : ''}
         ${e.note ? `<div class="sub">💬 ${esc(e.note)}</div>` : ''}
+        ${e.edited ? `<div class="sub">${editedMark(e)}</div>` : ''}
       </div>
-      <button class="btn small" data-xdel="${i}">지우기</button>
+      <div class="more-btns"><button class="btn small" data-edit="${i + 1}">✏️ 고치기</button><button class="btn small" data-xdel="${i}">지우기</button></div>
     </div>`).join('')}</div>`;
 }
+
+// 책 이름 · 시작/끝 쪽과 줄 · 따라 쓴 문장 입력 칸 (새로 쓸 때와 고칠 때 같이 씀)
+function bookFields(b) {
+  const num = (id, v, ph) => `<input id="${id}" type="number" inputmode="numeric" min="1" placeholder="${ph}" value="${esc(v)}">`;
+  return `
+    <label class="f" for="bTitle">책 이름</label>
+    <input id="bTitle" list="bookList" maxlength="40" placeholder="예) 마당을 나온 암탉" value="${esc(b.title)}">
+    <datalist id="bookList">${recentBooks().map(n => `<option value="${esc(n)}">`).join('')}</datalist>
+    <div class="book-range">
+      <span class="book-lbl">시작</span>
+      <label>${num('bPage', b.page, '')}<span>쪽</span></label>
+      <label>${num('bFrom', b.from, '')}<span>째 줄부터</span></label>
+      <span class="book-lbl">끝</span>
+      <label>${num('bToPage', b.toPage, '같은 쪽')}<span>쪽</span></label>
+      <label>${num('bTo', b.to, '')}<span>째 줄까지</span></label>
+    </div>
+    <p class="muted" style="margin:6px 0 0;font-size:13px">한 쪽 안에서 썼으면 끝 쪽은 비워 두세요.</p>
+    <label class="f" for="bText">따라 쓴 문장 (안 써도 돼요)</label>
+    <textarea id="bText" rows="2" maxlength="300" placeholder="마음에 든 문장을 적어 두면 나중에 다시 볼 수 있어요">${esc(b.text)}</textarea>`;
+}
+function stickerPicker(cur) {
+  return `<div class="stickers" id="stickers">${STICKERS.map((e, i) => `<button data-s="${e}" class="${(cur ? e === cur : i === 0) ? 'on' : ''}">${e}</button>`).join('')}</div>`;
+}
+// ✏️ 고치기: 책 정보 · 따라 쓴 문장 · 느낀 점 · 스티커만 (날짜, 견본 문장, 쓴 방법은 그대로)
+function editForm(e) {
+  const b = e.book ? { ...e.book, toPage: e.book.toPage && e.book.toPage !== e.book.page ? e.book.toPage : '', text: e.sentence.t || '' } : null;
+  return `<h3 style="margin:0 0 10px">✏️ ${editIdx === 0 ? '' : `${editIdx + 1}번째 `}기록 고치기</h3>
+    ${b ? `<div class="book-form edit-form">${bookFields(b)}</div>` : '<p class="muted" style="margin-top:0;font-size:14px">🔒 날짜와 문장, 쓴 방법은 그대로예요. 바꾸려면 다시 쓰기를 해 주세요.</p>'}
+    <label class="f">스티커</label>
+    ${stickerPicker(e.sticker)}
+    <label class="f" for="eNote">느낀 점</label>
+    <textarea id="eNote" rows="2" maxlength="200">${esc(e.note || '')}</textarea>
+    <div class="row" style="margin-top:12px"><button class="btn" id="editCancel">취소</button><button class="btn primary grow" id="editSave">고친 내용 저장</button></div>`;
+}
+const editedMark = e => e.edited ? ' <span class="edited">✏️ 고침</span>' : '';
 
 function renderDay() {
   const ds = selDate, r = data.days[ds], t = today();
   const isToday = ds === t, future = ds > t, done = isDone(ds);
   if (!done) addMode = false;
+  const ed = done && !addMode && !pending && editIdx !== null ? entries(r)[editIdx] : null;
+  if (!ed) editIdx = null;
+  const editing = !!ed;
   const s = curSentence();
   const writing = !future && (!done || addMode) && !pending;
   let head = `<div class="day-title"><h2 style="margin:0">${dateTitle(ds)}${isToday ? ' · 오늘' : ''}${addMode ? ` · ${entries(r).length + 1}번째` : ''}</h2>
@@ -319,6 +361,7 @@ function renderDay() {
   if (writing) head += `<div class="srcs" id="srcs">${Object.entries(SOURCES).map(([k, v]) => `<button data-src="${k}" class="${k === src ? 'on' : ''}">${v}</button>`).join('')}</div>`;
   if (pending && pending.mode === 'book') head += bookBox(pending.book, pending.text);
   else if (writing || pending || !done) { if (!(writing && src === 'book')) head += sentenceBox(s); }
+  else if (editing) { if (ed.mode !== 'book') head += sentenceBox(ed.sentence); }
   else if (r.mode === 'book') head += bookBox(r.book, r.sentence && r.sentence.t);
   else head += sentenceBox(r.sentence || s);
   const cancel = addMode ? '<div class="center" style="margin-top:8px"><button class="btn small" id="addCancel">그만두기</button></div>' : '';
@@ -327,33 +370,20 @@ function renderDay() {
     body = `<p class="center muted">아직 오지 않은 날이에요. 미리 읽어 봐도 좋아요 😊</p>`;
   } else if (writing && src === 'book') {
     const b = bookDraft || (bookDraft = { title: data.lastBook || '', page: '', from: '', toPage: '', to: '', text: '' });
-    const num = (id, v, ph) => `<input id="${id}" type="number" inputmode="numeric" min="1" placeholder="${ph}" value="${esc(v)}">`;
-    body = `<div class="book-form">
-        <label class="f" for="bTitle">책 이름</label>
-        <input id="bTitle" list="bookList" maxlength="40" placeholder="예) 마당을 나온 암탉" value="${esc(b.title)}">
-        <datalist id="bookList">${recentBooks().map(n => `<option value="${esc(n)}">`).join('')}</datalist>
-        <div class="book-range">
-          <span class="book-lbl">시작</span>
-          <label>${num('bPage', b.page, '')}<span>쪽</span></label>
-          <label>${num('bFrom', b.from, '')}<span>째 줄부터</span></label>
-          <span class="book-lbl">끝</span>
-          <label>${num('bToPage', b.toPage, '같은 쪽')}<span>쪽</span></label>
-          <label>${num('bTo', b.to, '')}<span>째 줄까지</span></label>
-        </div>
-        <p class="muted" style="margin:6px 0 0;font-size:13px">한 쪽 안에서 썼으면 끝 쪽은 비워 두세요.</p>
-        <label class="f" for="bText">따라 쓴 문장 (안 써도 돼요)</label>
-        <textarea id="bText" rows="2" maxlength="300" placeholder="마음에 든 문장을 적어 두면 나중에 다시 볼 수 있어요">${esc(b.text)}</textarea>
-      </div>
+    body = `<div class="book-form">${bookFields(b)}</div>
       <p class="center">📓 책을 펴고 고른 줄을 공책에 <b>또박또박</b> 따라 써 보세요.</p>
       <button class="btn primary big finish">다 썼어요! ✨</button>${cancel}`;
+  } else if (editing) {
+    body = editForm(ed);
   } else if (done && !addMode && !pending) {
     body = `<div class="done-view">
       <div class="big">${esc(r.sticker || '⭐')}</div>
-      <h3>${MODE_DONE[r.mode] || ''} 필사 완료!</h3>
+      <h3>${MODE_DONE[r.mode] || ''} 필사 완료!${editedMark(r)}</h3>
       ${r.note ? `<div class="note">💬 ${esc(r.note)}</div>` : ''}
       ${r.typed ? `<div class="note" style="font-family:'Gowun Batang',serif">⌨️ ${esc(r.typed)}</div>` : ''}
       <div class="row" style="justify-content:center;margin-top:12px;flex-wrap:wrap">
         ${F.isParent(kid.id) ? '' : `<button class="btn parent-stamp ${r.parent ? 'on' : ''}" id="parentBtn">${r.parent ? '👍 부모님이 확인했어요' : '👍 부모님 확인 도장'}</button>`}
+        <button class="btn" data-edit="0">✏️ 고치기</button>
         <button class="btn" id="redoBtn">다시 쓰기</button>
       </div>
       ${moreList(r)}
@@ -361,7 +391,7 @@ function renderDay() {
   } else if (pending) {
     body = `<div class="center">
       <h3>🎉 잘했어요! 오늘의 스티커를 골라요</h3>
-      <div class="stickers" id="stickers">${STICKERS.map((e, i) => `<button data-s="${e}" class="${i === 0 ? 'on' : ''}">${e}</button>`).join('')}</div>
+      ${stickerPicker()}
       <label class="f" for="note" style="text-align:left">오늘 문장을 쓰고 느낀 점 (안 써도 돼요)</label>
       <textarea id="note" rows="2" maxlength="200" placeholder="예) 나도 포기하지 않고 줄넘기 연습을 해야겠다."></textarea>
       <div style="margin-top:12px"><button class="btn primary big" id="saveDone">달력에 붙이기 ✨</button></div></div>`;
@@ -471,7 +501,7 @@ function updateTyping() {
 // ---------- 이벤트 ----------
 $('#cal').onclick = e => {
   const b = e.target.closest('[data-d]'); if (!b) return;
-  selDate = b.dataset.d; pending = null; addMode = false;
+  selDate = b.dataset.d; pending = null; addMode = false; editIdx = null;
   renderCal(); renderDay();
   $('#day').scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
@@ -496,6 +526,23 @@ $('#day').addEventListener('click', e => {
     renderDay(); return;
   }
   if (t.closest('#addCancel')) { addMode = false; bookDraft = null; renderDay(); return; }
+  const eb = t.closest('[data-edit]');
+  if (eb) { editIdx = Number(eb.dataset.edit); renderDay(); $('#day').scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+  if (t.closest('#editCancel')) { editIdx = null; renderDay(); return; }
+  if (t.closest('#editSave')) {
+    const e = entries(data.days[selDate])[editIdx]; if (!e) return;
+    if (e.mode === 'book') {
+      const book = readBookForm(); if (!book) return;
+      e.book = book;
+      e.sentence = { t: $('#bText').value.trim(), m: '', s: book.title + ' ' + bookWhere(book) };
+    }
+    e.sticker = (document.querySelector('#stickers .on') || {}).dataset?.s || e.sticker;
+    e.note = $('#eNote').value.trim();
+    e.edited = Date.now(); // 부모님 확인 도장은 그대로 두고 '고침' 표시만 남김
+    editIdx = null; save();
+    F.toast('✏️ 고쳤어요!');
+    renderCal(); renderDay(); return;
+  }
   const xd = t.closest('[data-xdel]');
   if (xd) {
     if (!confirm('이 필사 기록을 지울까요?')) return;
@@ -564,7 +611,7 @@ $('#day').addEventListener('click', e => {
 });
 // 책 입력 칸에 쓰는 내용을 기억해 둠
 $('#day').addEventListener('input', e => {
-  if (!e.target.closest('.book-form')) return;
+  if (!e.target.closest('.book-form') || e.target.closest('.edit-form')) return;
   bookDraft = { title: $('#bTitle').value, page: $('#bPage').value, from: $('#bFrom').value, toPage: $('#bToPage').value, to: $('#bTo').value, text: $('#bText').value };
 });
 $('#day').addEventListener('input', e => { if (e.target.id === 'typed') updateTyping(); });
@@ -602,7 +649,7 @@ window.addEventListener('resize', () => {
 
 // ---------- 시작 ----------
 function resetView() {
-  const n = new Date(); viewY = n.getFullYear(); viewM = n.getMonth(); selDate = today(); pending = null; bookDraft = null; addMode = false;
+  const n = new Date(); viewY = n.getFullYear(); viewM = n.getMonth(); selDate = today(); pending = null; bookDraft = null; addMode = false; editIdx = null;
 }
 function onKid() { load(); resetView(); renderAll(); F.sync.pull(['pilsa.' + kid.id, ...F.sync.sharedKeys()]); }
 load(); resetView();
@@ -625,7 +672,7 @@ window.addEventListener('familysync', e => {
   load(); F.renderPicker($('#kids'), onKid);
   renderStats(); renderCal(); renderCustom();
   const ae = document.activeElement;
-  const busy = pending || addMode || (tr && tr.ink > 0 && $('#trace')) || (ae && (ae.id === 'typed' || ae.closest('.book-form')));
+  const busy = pending || addMode || editIdx !== null || (tr && tr.ink > 0 && $('#trace')) || (ae && (ae.id === 'typed' || ae.closest('.book-form')));
   if (!busy) renderDay();
 });
 F.sync.pull(['family.kids', 'pilsa.' + kid.id, ...F.sync.sharedKeys()]);
