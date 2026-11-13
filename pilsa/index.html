@@ -76,8 +76,18 @@
   .book-where { margin-top: 4px; font-size: 15px; color: #6b5e57; }
   .book-form { margin-bottom: 12px; }
   .book-form label.f:first-child { margin-top: 0; }
-  .book-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .book-nums input { text-align: center; }
+  .book-range { display: grid; grid-template-columns: auto 1fr 1.4fr; gap: 8px; align-items: center; margin-top: 12px; }
+  .book-range .book-lbl { font-family: 'Jua', sans-serif; color: var(--muted); }
+  .book-range label { display: flex; align-items: center; gap: 4px; white-space: nowrap; font-size: 15px; }
+  .book-range input { text-align: center; min-width: 0; padding-left: 4px; padding-right: 4px; }
+  .book-range input::placeholder { font-size: 13px; }
+  .more-list { margin-top: 14px; text-align: left; }
+  .more-list h4 { margin: 0 0 6px; font-family: 'Jua', sans-serif; font-weight: 400; font-size: 17px; }
+  .more-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px dashed var(--line); }
+  .more-item .st { font-size: 30px; line-height: 1; }
+  .more-item .t { word-break: keep-all; }
+  .more-item .sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .cell .cnt { position: absolute; left: 3px; bottom: 0; font-size: 11px; color: #b45309; font-weight: bold; }
 
   .custom-item { display: flex; gap: 8px; align-items: flex-start; padding: 8px 0; border-bottom: 1px dashed var(--line); }
   .custom-item .grow { word-break: keep-all; }
@@ -140,6 +150,7 @@ const WD = ['일', '월', '화', '수', '목', '금', '토'];
 
 let kid, data, words, viewY, viewM, selDate, mode = 'paper', pending = null;
 let src = 'sample', bookDraft = null; // bookDraft: 책 입력 칸에 쓰던 내용 (다른 화면에 다녀와도 남아 있게)
+let addMode = false, addSentence = null; // 이미 쓴 날에 '한 번 더 쓰기' 중인지
 const today = () => F.ymd();
 
 function load() {
@@ -180,29 +191,44 @@ function sentenceFor(ds) {
   return p[((dayNo(ds) % p.length) + p.length) % p.length];
 }
 function isDone(ds) { return !!(data.days[ds] && data.days[ds].done); }
+// 하루에 여러 번 쓸 수 있어요: 첫 번째 기록은 그날 칸에, 두 번째부터는 extra에 차례로
+const entries = r => r && r.done ? [r, ...(r.extra || [])] : [];
+// 한 번 더 쓰는 중이면 새로 고른 문장, 아니면 그날의 문장
+const curSentence = () => addMode ? addSentence : sentenceFor(selDate);
+function randomSentence(not) {
+  const p = pool();
+  let next = p[Math.floor(Math.random() * p.length)];
+  for (let i = 0; i < 5 && next.t === not && p.length > 1; i++) next = p[Math.floor(Math.random() * p.length)];
+  return next;
+}
 
 // ---------- 내가 읽은 책 ----------
 function bookWhere(b) {
+  const toPage = b.toPage || b.page; // 예전 기록에는 끝 쪽이 없음 (한 쪽 안에서만 씀)
+  if (toPage !== b.page) return `${b.page}쪽 ${b.from}째 줄부터 ${toPage}쪽 ${b.to}째 줄까지`;
   return `${b.page}쪽 · ${b.from === b.to ? `${b.from}째 줄` : `${b.from}째 줄부터 ${b.to}째 줄까지`}`;
 }
 // 전에 쓴 책 이름 (최근 것부터) — 책 이름 칸에서 골라 쓸 수 있게
 function recentBooks() {
   const seen = new Set();
   Object.keys(data.days).sort().reverse().forEach(d => {
-    const r = data.days[d];
-    if (r.mode === 'book' && r.book && r.book.title) seen.add(r.book.title);
+    entries(data.days[d]).forEach(r => { if (r.mode === 'book' && r.book && r.book.title) seen.add(r.book.title); });
   });
   return [...seen].slice(0, 15);
 }
 function readBookForm() {
   const toInt = id => parseInt($(id).value, 10) || 0;
   const title = $('#bTitle').value.trim().replace(/\s+/g, ' ');
-  const page = toInt('#bPage'), from = toInt('#bFrom'), to = toInt('#bTo') || from;
+  // 끝 쪽을 비우면 시작 쪽과 같은 쪽, 같은 쪽에서 끝 줄을 비우면 한 줄만
+  const page = toInt('#bPage'), from = toInt('#bFrom'), toPage = toInt('#bToPage') || page;
+  const to = toInt('#bTo') || (toPage === page ? from : 0);
   if (!title) return F.toast('책 이름을 적어 주세요 📖');
-  if (page < 1) return F.toast('몇 쪽인지 적어 주세요');
+  if (page < 1) return F.toast('몇 쪽부터인지 적어 주세요');
   if (from < 1) return F.toast('몇째 줄부터인지 적어 주세요');
-  if (to < from) return F.toast('끝 줄이 시작 줄보다 앞에 있어요');
-  return { title, page, from, to };
+  if (toPage < page) return F.toast('끝 쪽이 시작 쪽보다 앞에 있어요');
+  if (to < 1) return F.toast('몇째 줄까지인지 적어 주세요');
+  if (toPage === page && to < from) return F.toast('끝 줄이 시작 줄보다 앞에 있어요');
+  return { title, page, from, toPage, to };
 }
 
 function streak() {
@@ -239,7 +265,8 @@ function renderCal() {
     const r = data.days[ds];
     const dow = (first + d - 1) % 7;
     const cls = ['cell', ds === t && 'today', ds > t && 'future', ds === selDate && 'sel', isDone(ds) && 'done', dow === 0 && 'sun', dow === 6 && 'sat'].filter(Boolean).join(' ');
-    html += `<button class="${cls}" data-d="${ds}"><span class="n">${d}</span><span class="st">${isDone(ds) ? esc(r.sticker || '⭐') : ''}</span>${r && r.parent ? '<span class="pk">👍</span>' : ''}</button>`;
+    const n = entries(r).length;
+    html += `<button class="${cls}" data-d="${ds}"><span class="n">${d}</span><span class="st">${isDone(ds) ? esc(r.sticker || '⭐') : ''}</span>${n > 1 ? `<span class="cnt">×${n}</span>` : ''}${r && r.parent ? '<span class="pk">👍</span>' : ''}</button>`;
   }
   $('#cal').innerHTML = html;
 }
@@ -257,41 +284,69 @@ function bookBox(b, text) {
     </div>`;
 }
 
-function renderDay() {
-  const ds = selDate, r = data.days[ds], s = sentenceFor(ds), t = today();
-  const isToday = ds === t, future = ds > t, done = isDone(ds);
-  const writing = !future && !done && !pending;
-  let head = `<div class="day-title"><h2 style="margin:0">${dateTitle(ds)}${isToday ? ' · 오늘' : ''}</h2>
-    ${writing && src === 'sample' ? '<button class="btn small" id="shuffle" title="다른 문장으로 바꾸기">🔄 다른 문장</button>' : ''}</div>`;
-  if (writing) head += `<div class="srcs" id="srcs">${Object.entries(SOURCES).map(([k, v]) => `<button data-src="${k}" class="${k === src ? 'on' : ''}">${v}</button>`).join('')}</div>`;
-  if (done && r.mode === 'book') head += bookBox(r.book, r.sentence && r.sentence.t);
-  else if (pending && pending.mode === 'book') head += bookBox(pending.book, pending.text);
-  else if (!(writing && src === 'book')) head += `
-    <div class="sentence-box">
+function sentenceBox(s) {
+  return `<div class="sentence-box">
       <div class="sentence">${esc(s.t)}</div>
       ${s.m ? `<div class="meaning">💡 ${esc(s.m)}</div>` : ''}
       <div class="src">— ${esc(s.s)}</div>
     </div>`;
+}
+// 두 번째부터 쓴 필사 목록
+function moreList(r) {
+  const more = r.extra || [];
+  if (!more.length) return '';
+  return `<div class="more-list"><h4>✍️ 이날 더 쓴 필사</h4>${more.map((e, i) => `
+    <div class="more-item">
+      <div class="st">${esc(e.sticker || '⭐')}</div>
+      <div class="grow">
+        <div class="t">${e.mode === 'book' ? `📖 ${esc(e.book.title)}` : esc(e.sentence.t)}</div>
+        <div class="sub">${e.mode === 'book' ? esc(bookWhere(e.book)) : '— ' + esc(e.sentence.s)} · ${MODE_DONE[e.mode] || ''}</div>
+        ${e.mode === 'book' && e.sentence.t ? `<div class="sub">“${esc(e.sentence.t)}”</div>` : ''}
+        ${e.note ? `<div class="sub">💬 ${esc(e.note)}</div>` : ''}
+      </div>
+      <button class="btn small" data-xdel="${i}">지우기</button>
+    </div>`).join('')}</div>`;
+}
+
+function renderDay() {
+  const ds = selDate, r = data.days[ds], t = today();
+  const isToday = ds === t, future = ds > t, done = isDone(ds);
+  if (!done) addMode = false;
+  const s = curSentence();
+  const writing = !future && (!done || addMode) && !pending;
+  let head = `<div class="day-title"><h2 style="margin:0">${dateTitle(ds)}${isToday ? ' · 오늘' : ''}${addMode ? ` · ${entries(r).length + 1}번째` : ''}</h2>
+    ${writing && src === 'sample' ? '<button class="btn small" id="shuffle" title="다른 문장으로 바꾸기">🔄 다른 문장</button>' : ''}</div>`;
+  if (writing) head += `<div class="srcs" id="srcs">${Object.entries(SOURCES).map(([k, v]) => `<button data-src="${k}" class="${k === src ? 'on' : ''}">${v}</button>`).join('')}</div>`;
+  if (pending && pending.mode === 'book') head += bookBox(pending.book, pending.text);
+  else if (writing || pending || !done) { if (!(writing && src === 'book')) head += sentenceBox(s); }
+  else if (r.mode === 'book') head += bookBox(r.book, r.sentence && r.sentence.t);
+  else head += sentenceBox(r.sentence || s);
+  const cancel = addMode ? '<div class="center" style="margin-top:8px"><button class="btn small" id="addCancel">그만두기</button></div>' : '';
   let body = '';
   if (future) {
     body = `<p class="center muted">아직 오지 않은 날이에요. 미리 읽어 봐도 좋아요 😊</p>`;
   } else if (writing && src === 'book') {
-    const b = bookDraft || (bookDraft = { title: data.lastBook || '', page: '', from: '', to: '', text: '' });
+    const b = bookDraft || (bookDraft = { title: data.lastBook || '', page: '', from: '', toPage: '', to: '', text: '' });
+    const num = (id, v, ph) => `<input id="${id}" type="number" inputmode="numeric" min="1" placeholder="${ph}" value="${esc(v)}">`;
     body = `<div class="book-form">
         <label class="f" for="bTitle">책 이름</label>
         <input id="bTitle" list="bookList" maxlength="40" placeholder="예) 마당을 나온 암탉" value="${esc(b.title)}">
         <datalist id="bookList">${recentBooks().map(n => `<option value="${esc(n)}">`).join('')}</datalist>
-        <div class="book-nums">
-          <div><label class="f" for="bPage">페이지</label><input id="bPage" type="number" inputmode="numeric" min="1" placeholder="쪽" value="${esc(b.page)}"></div>
-          <div><label class="f" for="bFrom">몇째 줄부터</label><input id="bFrom" type="number" inputmode="numeric" min="1" placeholder="줄" value="${esc(b.from)}"></div>
-          <div><label class="f" for="bTo">몇째 줄까지</label><input id="bTo" type="number" inputmode="numeric" min="1" placeholder="줄" value="${esc(b.to)}"></div>
+        <div class="book-range">
+          <span class="book-lbl">시작</span>
+          <label>${num('bPage', b.page, '')}<span>쪽</span></label>
+          <label>${num('bFrom', b.from, '')}<span>째 줄부터</span></label>
+          <span class="book-lbl">끝</span>
+          <label>${num('bToPage', b.toPage, '같은 쪽')}<span>쪽</span></label>
+          <label>${num('bTo', b.to, '')}<span>째 줄까지</span></label>
         </div>
+        <p class="muted" style="margin:6px 0 0;font-size:13px">한 쪽 안에서 썼으면 끝 쪽은 비워 두세요.</p>
         <label class="f" for="bText">따라 쓴 문장 (안 써도 돼요)</label>
         <textarea id="bText" rows="2" maxlength="300" placeholder="마음에 든 문장을 적어 두면 나중에 다시 볼 수 있어요">${esc(b.text)}</textarea>
       </div>
       <p class="center">📓 책을 펴고 고른 줄을 공책에 <b>또박또박</b> 따라 써 보세요.</p>
-      <button class="btn primary big finish">다 썼어요! ✨</button>`;
-  } else if (done) {
+      <button class="btn primary big finish">다 썼어요! ✨</button>${cancel}`;
+  } else if (done && !addMode && !pending) {
     body = `<div class="done-view">
       <div class="big">${esc(r.sticker || '⭐')}</div>
       <h3>${MODE_DONE[r.mode] || ''} 필사 완료!</h3>
@@ -300,7 +355,9 @@ function renderDay() {
       <div class="row" style="justify-content:center;margin-top:12px;flex-wrap:wrap">
         ${F.isParent(kid.id) ? '' : `<button class="btn parent-stamp ${r.parent ? 'on' : ''}" id="parentBtn">${r.parent ? '👍 부모님이 확인했어요' : '👍 부모님 확인 도장'}</button>`}
         <button class="btn" id="redoBtn">다시 쓰기</button>
-      </div></div>`;
+      </div>
+      ${moreList(r)}
+      <button class="btn primary" id="addMore" style="margin-top:14px;width:100%;padding:14px;font-size:18px">✍️ 한 번 더 쓰기</button></div>`;
   } else if (pending) {
     body = `<div class="center">
       <h3>🎉 잘했어요! 오늘의 스티커를 골라요</h3>
@@ -323,6 +380,7 @@ function renderDay() {
         <div class="acc" id="acc">정확도 0%</div>
         <button class="btn primary big finish" disabled>다 썼어요! ✨</button>`;
     }
+    body += cancel;
   }
   $('#day').innerHTML = head + body;
   if (writing && src === 'sample') {
@@ -393,7 +451,7 @@ function drawGuide() {
 // ---------- 타자로 쓰기 ----------
 function updateTyping() {
   const ta = $('#typed'); if (!ta) return;
-  const target = sentenceFor(selDate).t;
+  const target = curSentence().t;
   const typed = ta.value.replace(/\s/g, '');
   let k = 0, ok = 0, html = '';
   for (const ch of target) {
@@ -413,7 +471,7 @@ function updateTyping() {
 // ---------- 이벤트 ----------
 $('#cal').onclick = e => {
   const b = e.target.closest('[data-d]'); if (!b) return;
-  selDate = b.dataset.d; pending = null;
+  selDate = b.dataset.d; pending = null; addMode = false;
   renderCal(); renderDay();
   $('#day').scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
@@ -428,11 +486,22 @@ $('#day').addEventListener('click', e => {
   if (sb) { src = sb.dataset.src; data.lastSrc = src; save(); renderDay(); return; }
   if (t.closest('#clearInk') && tr) { drawGuide(); tr.ink = 0; $('.finish').disabled = true; return; }
   if (t.closest('#shuffle')) {
-    const p = pool(), cur = sentenceFor(selDate).t;
-    let next = p[Math.floor(Math.random() * p.length)];
-    for (let i = 0; i < 5 && next.t === cur && p.length > 1; i++) next = p[Math.floor(Math.random() * p.length)];
-    data.days[selDate] = { ...(data.days[selDate] || {}), done: false, sentence: next };
-    save(); renderDay(); return;
+    const next = randomSentence(curSentence().t);
+    if (addMode) addSentence = next; // 한 번 더 쓰기용 문장은 저장하지 않고 바꿈
+    else { data.days[selDate] = { ...(data.days[selDate] || {}), done: false, sentence: next }; save(); }
+    renderDay(); return;
+  }
+  if (t.closest('#addMore')) {
+    addMode = true; addSentence = randomSentence(sentenceFor(selDate).t); bookDraft = null;
+    renderDay(); return;
+  }
+  if (t.closest('#addCancel')) { addMode = false; bookDraft = null; renderDay(); return; }
+  const xd = t.closest('[data-xdel]');
+  if (xd) {
+    if (!confirm('이 필사 기록을 지울까요?')) return;
+    const r = data.days[selDate];
+    r.extra = (r.extra || []).filter((_, i) => i !== Number(xd.dataset.xdel));
+    save(); renderAll(); return;
   }
   if (t.closest('.finish')) {
     if (src === 'book') {
@@ -454,13 +523,24 @@ $('#day').addEventListener('click', e => {
       data.lastBook = pending.book.title;
       bookDraft = null;
     } else {
-      Object.assign(rec, { typed: pending.typed, sentence: sentenceFor(selDate) });
+      Object.assign(rec, { typed: pending.typed, sentence: curSentence() });
     }
-    data.days[selDate] = rec;
-    pending = null; save();
+    const day = data.days[selDate] || {};
+    let count;
+    if (addMode) {
+      delete rec.parent; // 확인 도장은 그날 하나
+      day.extra = [...(day.extra || []), rec];
+      count = entries(day).length;
+    } else {
+      if (day.extra && day.extra.length) rec.extra = day.extra; // '다시 쓰기' 해도 더 쓴 기록은 남김
+      data.days[selDate] = rec;
+      count = entries(rec).length;
+    }
+    pending = null; addMode = false; save();
     F.celebrate([sticker, '✨', '🎉']);
     const s = streak();
-    F.toast(s >= 2 && selDate === today() ? `🔥 ${s}일 연속 필사! 대단해요!` : '✍️ 달력에 스티커를 붙였어요!');
+    F.toast(count >= 2 ? `✍️ 이날 ${count}번째 필사! 정말 열심히 했어요!`
+      : s >= 2 && selDate === today() ? `🔥 ${s}일 연속 필사! 대단해요!` : '✍️ 달력에 스티커를 붙였어요!');
     renderAll(); return;
   }
   if (t.closest('#parentBtn')) {
@@ -475,9 +555,9 @@ $('#day').addEventListener('click', e => {
       // 책 내용은 입력 칸에 다시 채워 두고, 이 날의 견본 문장은 원래대로
       bookDraft = { ...r.book, text: (r.sentence && r.sentence.t) || '' };
       src = 'book';
-      data.days[selDate] = { done: false };
+      data.days[selDate] = { done: false, extra: r.extra };
     } else {
-      data.days[selDate] = { done: false, sentence: r.sentence };
+      data.days[selDate] = { done: false, sentence: r.sentence, extra: r.extra };
     }
     save(); renderAll();
   }
@@ -485,7 +565,7 @@ $('#day').addEventListener('click', e => {
 // 책 입력 칸에 쓰는 내용을 기억해 둠
 $('#day').addEventListener('input', e => {
   if (!e.target.closest('.book-form')) return;
-  bookDraft = { title: $('#bTitle').value, page: $('#bPage').value, from: $('#bFrom').value, to: $('#bTo').value, text: $('#bText').value };
+  bookDraft = { title: $('#bTitle').value, page: $('#bPage').value, from: $('#bFrom').value, toPage: $('#bToPage').value, to: $('#bTo').value, text: $('#bText').value };
 });
 $('#day').addEventListener('input', e => { if (e.target.id === 'typed') updateTyping(); });
 
@@ -517,12 +597,12 @@ let lastW = window.innerWidth;
 window.addEventListener('resize', () => {
   if (Math.abs(window.innerWidth - lastW) < 40) return;
   lastW = window.innerWidth;
-  if (mode === 'trace' && $('#trace') && !(tr && tr.ink > 0)) setupTrace(sentenceFor(selDate).t);
+  if (mode === 'trace' && $('#trace') && !(tr && tr.ink > 0)) setupTrace(curSentence().t);
 });
 
 // ---------- 시작 ----------
 function resetView() {
-  const n = new Date(); viewY = n.getFullYear(); viewM = n.getMonth(); selDate = today(); pending = null; bookDraft = null;
+  const n = new Date(); viewY = n.getFullYear(); viewM = n.getMonth(); selDate = today(); pending = null; bookDraft = null; addMode = false;
 }
 function onKid() { load(); resetView(); renderAll(); F.sync.pull(['pilsa.' + kid.id, ...F.sync.sharedKeys()]); }
 load(); resetView();
@@ -536,7 +616,7 @@ $('#setBtn').onclick = () => {
   $('#main').classList.toggle('hidden', open);
   $('#setBtn').textContent = open ? '✕' : '⚙️';
   $('#setBtn').title = open ? '설정 닫기' : '설정';
-  if (!open && mode === 'trace' && $('#trace') && !(tr && tr.ink > 0)) setupTrace(sentenceFor(selDate).t);
+  if (!open && mode === 'trace' && $('#trace') && !(tr && tr.ink > 0)) setupTrace(curSentence().t);
 };
 
 // 구글 시트에 더 최신 기록이 있으면 받아서 다시 그림 (쓰는 중인 화면은 건드리지 않음)
@@ -545,7 +625,7 @@ window.addEventListener('familysync', e => {
   load(); F.renderPicker($('#kids'), onKid);
   renderStats(); renderCal(); renderCustom();
   const ae = document.activeElement;
-  const busy = pending || (tr && tr.ink > 0 && $('#trace')) || (ae && (ae.id === 'typed' || ae.closest('.book-form')));
+  const busy = pending || addMode || (tr && tr.ink > 0 && $('#trace')) || (ae && (ae.id === 'typed' || ae.closest('.book-form')));
   if (!busy) renderDay();
 });
 F.sync.pull(['family.kids', 'pilsa.' + kid.id, ...F.sync.sharedKeys()]);

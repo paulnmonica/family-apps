@@ -154,8 +154,11 @@ function buildViews() {
     const done = d => !!(days[d] && days[d].done);
     const doneKeys = Object.keys(days).filter(done).sort().reverse();
     doneKeys.forEach(d => {
-      const r = days[d], s = r.sentence || {};
-      pilsa.push([k.name, d, MODE[r.mode] || '', r.sticker || '', s.t || '', s.s || '', r.note || '', r.parent ? '👍' : '']);
+      // 하루에 여러 번 쓴 날은 한 줄씩 (두 번째부터는 extra에 있음)
+      [days[d]].concat(days[d].extra || []).forEach((r, i) => {
+        const s = r.sentence || {};
+        pilsa.push([k.name, d, MODE[r.mode] || '', r.sticker || '', s.t || '', s.s || '', r.note || '', i === 0 && days[d].parent ? '👍' : '']);
+      });
     });
     let cur = done(today) ? today : prevDay(today), streak = 0;
     while (done(cur)) { streak++; cur = prevDay(cur); }
